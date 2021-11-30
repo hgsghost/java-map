@@ -27,7 +27,7 @@
 
 ##### 1.1.3 uml图
 
-![uml图](.\1resource\uml图.jpg)
+![uml图](.\resource\uml图.jpg)
 
 ##### 1.1.4 时序图
 
@@ -41,7 +41,7 @@
 + 自关联消息
 + 组合片段
 
-![时序图](.\1resource\时序图.jpg)
+![时序图](.\resource\时序图.jpg)
 
 ##### 1.1.5 缓冲池
 
@@ -115,7 +115,7 @@ public @interface MyMethodAnnotation {
 
 ## 1.4 异常
 
-![异常](.\1resource\异常.png)
+![异常](.\resource\异常.png)
 
 只针对不正常的情况才使用异常:
 
