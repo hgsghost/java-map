@@ -304,4 +304,223 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
    }
    ```
 
+### 3.13 JUC线程池
+
+### 3.13.1 FutureTask
+
+#### 3.13.1.1 面试题
+
+1. FutrueTask用来解决什么问题的?为什么会出现
+
+   Future接口代表异步计算的结果，通过Future接口提供的方法可以查看异步计算是否执行完成，或者等待执行结果并获取执行结果，同时还可以取消执行。
+
+   FutrueTask对线程做了封装,用来控制线程的状态
+
+   //TODO
+
+2. FutureTask类结构关系
+
+   ![](resource\FutureTask.png)
+
+3. FutureTask的线程安全是由什么保证的
+
+   FutureTask中线程状态state 有volatile修饰符,使用cas改变其状态
+
+4. FutureTask结果返回机制
+
+   无论是通过runnable还是callable创建的FutureTask,参数都会被封装成为一个callable赋值到对象的callable变量
+
+   ```java
+   public FutureTask(Callable<V> callable) {
+       if (callable == null)
+           throw new NullPointerException();
+       this.callable = callable;
+       this.state = NEW;       // ensure visibility of callable
+   }
+   public FutureTask(Runnable runnable, V result) {
+       this.callable = Executors.callable(runnable, result);
+       this.state = NEW;       // ensure visibility of callable
+   }
+   //这是Executors.callable方法
+   public static <T> Callable<T> callable(Runnable task, T result) {
+       if (task == null)
+          throw new NullPointerException();
+       return new RunnableAdapter<T>(task, result);
+   }
+   static final class RunnableAdapter<T> implements Callable<T> {
+       final Runnable task;
+       final T result;
+       RunnableAdapter(Runnable task, T result) {
+           this.task = task;
+           this.result = result;
+       }
+       public T call() {
+           task.run();
+           return result;
+       }
+   }
+   ```
+
+   后在run方法中执行callable.call得到结果赋值给outcome 变量
+
+   ```java
+   public void run() {
+       //新建任务，CAS替换runner为当前线程
+       if (state != NEW || !UNSAFE.compareAndSwapObject(this,runnerOffset,null,Thread.currentThread()))
+           return;
+       try {
+           Callable<V> c = callable;
+           if (c != null && state == NEW) {
+               V result;
+               boolean ran;
+               try {
+                   result = c.call();
+                   ran = true;
+               } catch (Throwable ex) {
+                   result = null;
+                   ran = false;
+                   setException(ex);
+               }
+               if (ran)
+                   set(result);//设置执行结果
+           }
+       } finally {
+           // runner must be non-null until state is settled to
+           // prevent concurrent calls to run()
+           runner = null;
+           // state must be re-read after nulling runner to prevent
+           // leaked interrupts
+           int s = state;
+           if (s >= INTERRUPTING)
+               handlePossibleCancellationInterrupt(s);//处理中断逻辑
+       }
+   }
+   protected void set(V v) {
+       if (UNSAFE.compareAndSwapInt(this, stateOffset, NEW, COMPLETING)) {
+           outcome = v;
+           UNSAFE.putOrderedInt(this, stateOffset, NORMAL); // final state
+           finishCompletion();//执行完毕，唤醒等待线程
+       }
+   }
+   private void finishCompletion() {
+       // assert state > COMPLETING;
+       for (WaitNode q; (q = waiters) != null;) {
+           if (UNSAFE.compareAndSwapObject(this, waitersOffset, q, null)) {//移除等待线程
+               for (;;) {//自旋遍历等待线程
+                   Thread t = q.thread;
+                   if (t != null) {
+                       q.thread = null;
+                       LockSupport.unpark(t);//唤醒等待线程
+                   }
+                   WaitNode next = q.next;
+                   if (next == null)
+                       break;
+                   q.next = null; // unlink to help gc
+                   q = next;
+               }
+               break;
+           }
+       }
+       //任务完成后调用函数，自定义扩展
+       done();
    
+       callable = null;        // to reduce footprint
+   }
+   private void handlePossibleCancellationInterrupt(int s) {
+       //在中断者中断线程之前可能会延迟，所以我们只需要让出CPU时间片自旋等待
+       if (s == INTERRUPTING)
+           while (state == INTERRUPTING)
+               Thread.yield(); // wait out pending interrupt
+   }
+   ```
+
+   最后通过FutureTask.get方法获取执行结果(未执行完会阻塞)
+
+   ```java
+   //获取执行结果
+   public V get() throws InterruptedException, ExecutionException {
+       int s = state;
+       if (s <= COMPLETING)
+           s = awaitDone(false, 0L);
+       return report(s);
+   }
+   //返回执行结果或抛出异常
+   private V report(int s) throws ExecutionException {
+       Object x = outcome;
+       if (s == NORMAL)
+           return (V)x;
+       if (s >= CANCELLED)
+           throw new CancellationException();
+       throw new ExecutionException((Throwable)x);
+   }
+   //未执行完 等待
+   private int awaitDone(boolean timed, long nanos)
+       throws InterruptedException {
+       final long deadline = timed ? System.nanoTime() + nanos : 0L;
+       WaitNode q = null;
+       boolean queued = false;
+       for (;;) {//自旋
+           if (Thread.interrupted()) {//获取并清除中断状态
+               removeWaiter(q);//移除等待WaitNode
+               throw new InterruptedException();
+           }
+   
+           int s = state;
+           //执行完成
+           if (s > COMPLETING) {
+               if (q != null)
+                   q.thread = null;//置空等待节点的线程
+               return s;
+           }
+           else if (s == COMPLETING) // cannot time out yet
+               Thread.yield();
+           else if (q == null)
+               q = new WaitNode();
+           else if (!queued)
+               //CAS修改waiter
+               queued = UNSAFE.compareAndSwapObject(this, waitersOffset,
+                                                    q.next = waiters, q);
+           else if (timed) {
+               nanos = deadline - System.nanoTime();
+               if (nanos <= 0L) {
+                   removeWaiter(q);//超时，移除等待节点
+                   return state;
+               }
+               LockSupport.parkNanos(this, nanos);//阻塞当前线程
+           }
+           else
+               LockSupport.park(this);//阻塞当前线程
+       }
+   }
+   
+   ```
+
+   
+
+   
+
+5. FutureTask内部运行状态的转变
+
+   ```java
+   //任务状态
+   private volatile int state;
+   private static final int NEW          = 0;
+   private static final int COMPLETING   = 1;
+   private static final int NORMAL       = 2;
+   private static final int EXCEPTIONAL  = 3;
+   private static final int CANCELLED    = 4;
+   private static final int INTERRUPTING = 5;
+   private static final int INTERRUPTED  = 6;
+   ```
+
+   + `NEW`:表示是个新的任务或者还没被执行完的任务。这是初始状态。
+   + `COMPLETING`:任务已经执行完成或者执行任务的时候发生异常，但是任务执行结果或者异常原因还没有保存到outcome字段(outcome字段用来保存任务执行结果，如果发生异常，则用来保存异常原因)的时候，状态会从NEW变更到COMPLETING。但是这个状态会时间会比较短，属于中间状态。
+   + `NORMAL`:任务已经执行完成并且任务执行结果已经保存到outcome字段，状态会从COMPLETING转换到NORMAL。这是一个最终态。
+   + `EXCEPTIONAL`:任务执行发生异常并且异常原因已经保存到outcome字段中后，状态会从COMPLETING转换到EXCEPTIONAL。这是一个最终态。
+   + `CANCELLED`:任务还没开始执行或者已经开始执行但是还没有执行完成的时候，用户调用了cancel(false)方法取消任务且不中断任务执行线程，这个时候状态会从NEW转化为CANCELLED状态。这是一个最终态。
+   + `INTERRUPTING`: 任务还没开始执行或者已经执行但是还没有执行完成的时候，用户调用了cancel(true)方法取消任务并且要中断任务执行线程但是还没有中断任务执行线程之前，状态会从NEW转化为INTERRUPTING。这是一个中间状态。
+   + `INTERRUPTED`:调用interrupt()中断任务执行线程之后状态会从INTERRUPTING转换到INTERRUPTED。这是一个最终态。 有一点需要注意的是，所有值大于COMPLETING的状态都表示任务已经执行完成(任务正常执行完成，任务执行异常或者任务被取消)。
+
+   ![](resource\FutureTaskState.png)
+
+6. FutureTask通常会怎么用
