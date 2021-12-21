@@ -1006,7 +1006,140 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
 
     
 
-    
+    ### 3.13.3 ScheduledThreadPoolExecutor
 
+    #### 3.13.3.1 面试题
+    
+    1. ScheduledThreadPoolExecutor要解决什么样的ScheduledThreadPoolExecutor继承自 ThreadPoolExecutor，为任务提供延迟或周期执行，属于线程池的一种。
+    
+    2. ScheduledThreadPoolExecutor相比ThreadPoolExecutor有哪些特性?
+    
+       + 使用专门的任务类型—ScheduledFutureTask 来执行周期任务，也可以接收不需要时间调度的任务(这些任务通过 ExecutorService 来执行)。
+    
+       + 使用专门的存储队列—DelayedWorkQueue 来存储任务，DelayedWorkQueue 是无界延迟队列DelayQueue 的一种。相比ThreadPoolExecutor也简化了执行机制(delayedExecute方法，后面单独分析)。
+    
+       + 支持可选的run-after-shutdown参数，在池被关闭(shutdown)之后支持可选的逻辑来决定是否继续运行周期或延迟任务。并且当任务(重新)提交操作与 shutdown 操作重叠时，复查逻辑也不相同
+    
+    3. ScheduledThreadPoolExecutor有什么样的数据结构，核心内部类和抽象类?
+    
+       ![](resource\scheduledThreadPoolExecutor.png)
+    
+       ScheduledThreadPoolExecutor 内部构造了两个内部类 `ScheduledFutureTask` 和 `DelayedWorkQueue`:
+    
+       + `ScheduledFutureTask`: 继承了FutureTask，说明是一个异步运算任务；最上层分别实现了Runnable、Future、Delayed接口，说明它是一个可以延迟执行的异步运算任务。
+    
+       + `DelayedWorkQueue`: 这是 ScheduledThreadPoolExecutor 为存储周期或延迟任务专门定义的一个延迟队列，继承了 AbstractQueue，为了契合 ThreadPoolExecutor 也实现了 BlockingQueue 接口。它内部只允许存储 RunnableScheduledFuture 类型的任务。与 DelayQueue 的不同之处就是它只允许存放 RunnableScheduledFuture 对象，并且自己实现了二叉堆(DelayQueue 是利用了 PriorityQueue 的二叉堆结构)
+    
+    4. ScheduledThreadPoolExecutor有哪两个关闭策略? 区别是什么?
+    
+       ```java
+       //关闭后继续执行已经存在的周期任务  
+       private volatile boolean continueExistingPeriodicTasksAfterShutdown; 
+       //关闭后继续执行已经存在的延时任务  
+       private volatile boolean executeExistingDelayedTasksAfterShutdown = true;
+       public void shutdown() {
+           super.shutdown();
+       }
+       //取消并清除由于关闭策略不应该运行的所有任务
+       @Override void onShutdown() {
+           BlockingQueue<Runnable> q = super.getQueue();
+           //获取run-after-shutdown参数
+           boolean keepDelayed =
+               getExecuteExistingDelayedTasksAfterShutdownPolicy();
+           boolean keepPeriodic =
+               getContinueExistingPeriodicTasksAfterShutdownPolicy();
+           if (!keepDelayed && !keepPeriodic) {//池关闭后不保留任务
+               //依次取消任务
+               for (Object e : q.toArray())
+                   if (e instanceof RunnableScheduledFuture<?>)
+                       ((RunnableScheduledFuture<?>) e).cancel(false);
+               q.clear();//清除等待队列
+           }
+           else {//池关闭后保留任务
+               // Traverse snapshot to avoid iterator exceptions
+               //遍历快照以避免迭代器异常
+               for (Object e : q.toArray()) {
+                   if (e instanceof RunnableScheduledFuture) {
+                       RunnableScheduledFuture<?> t =
+                           (RunnableScheduledFuture<?>)e;
+                       if ((t.isPeriodic() ? !keepPeriodic : !keepDelayed) ||
+                           t.isCancelled()) { // also remove if already cancelled
+                           //如果任务已经取消，移除队列中的任务
+                           if (q.remove(t))
+                               t.cancel(false);
+                       }
+                   }
+               }
+           }
+           tryTerminate(); //终止线程池
+       }
+       
+       ```
+    
+       
+    
+       
+    
+    5. ScheduledThreadPoolExecutor中scheduleAtFixedRate 和 scheduleWithFixedDelay区别是什么?
+    
+       ```java
+       /**
+        * 创建一个周期执行的任务，第一次执行延期时间为initialDelay，
+        * 之后每隔period执行一次，不等待第一次执行完成就开始计时
+        */
+       public ScheduledFuture<?> scheduleAtFixedRate(Runnable command,
+                                                     long initialDelay,
+                                                     long period,
+                                                     TimeUnit unit) {
+           if (command == null || unit == null)
+               throw new NullPointerException();
+           if (period <= 0)
+               throw new IllegalArgumentException();
+           //构建RunnableScheduledFuture任务类型
+           ScheduledFutureTask<Void> sft =
+               new ScheduledFutureTask<Void>(command,
+                                             null,
+                                             triggerTime(initialDelay, unit),//计算任务的延迟时间
+                                             unit.toNanos(period));//计算任务的执行周期
+           RunnableScheduledFuture<Void> t = decorateTask(command, sft);//执行用户自定义逻辑
+           sft.outerTask = t;//赋值给outerTask，准备重新入队等待下一次执行
+           delayedExecute(t);//执行任务
+           return t;
+       }
+       
+       /**
+        * 创建一个周期执行的任务，第一次执行延期时间为initialDelay，
+        * 在第一次执行完之后延迟delay后开始下一次执行
+        */
+       public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command,
+                                                        long initialDelay,
+                                                        long delay,
+                                                        TimeUnit unit) {
+           if (command == null || unit == null)
+               throw new NullPointerException();
+           if (delay <= 0)
+               throw new IllegalArgumentException();
+           //构建RunnableScheduledFuture任务类型
+           ScheduledFutureTask<Void> sft =
+               new ScheduledFutureTask<Void>(command,
+                                             null,
+                                             triggerTime(initialDelay, unit),//计算任务的延迟时间
+                                             unit.toNanos(-delay));//计算任务的执行周期
+           RunnableScheduledFuture<Void> t = decorateTask(command, sft);//执行用户自定义逻辑
+           sft.outerTask = t;//赋值给outerTask，准备重新入队等待下一次执行
+           delayedExecute(t);//执行任务
+           return t;
+       }
+       ```
+    
+    6. 为什么ThreadPoolExecutor 的调整策略却不适用于 ScheduledThreadPoolExecutor?
+    
+       例如: 由于 ScheduledThreadPoolExecutor 是一个固定核心线程数大小的线程池，并且使用了一个无界队列，所以调整maximumPoolSize对其没有任何影响(所以 ScheduledThreadPoolExecutor 没有提供可以调整最大线程数的构造函数，默认最大线程数固定为Integer.MAX_VALUE)。此外，设置corePoolSize为0或者设置核心线程空闲后清除(allowCoreThreadTimeOut)同样也不是一个好的策略，因为一旦周期任务到达某一次运行周期时，可能导致线程池内没有线程去处理这些任务。
+    
+    7. Executors 提供了几种方法来构造 ScheduledThreadPoolExecutor?
+    
+       + `ScheduledFutureTask`: 继承了FutureTask，说明是一个异步运算任务；最上层分别实现了Runnable、Future、Delayed接口，说明它是一个可以延迟执行的异步运算任务。
+       + `DelayedWorkQueue`: 这是 ScheduledThreadPoolExecutor 为存储周期或延迟任务专门定义的一个延迟队列，继承了 AbstractQueue，为了契合 ThreadPoolExecutor 也实现了 BlockingQueue 接口。它内部只允许存储 RunnableScheduledFuture 类型的任务。与 DelayQueue 的不同之处就是它只允许存放 RunnableScheduledFuture 对象，并且自己实现了二叉堆(DelayQueue 是利用了 PriorityQueue 的二叉堆结构)
+    
     
 
