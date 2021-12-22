@@ -1141,5 +1141,34 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
        + `ScheduledFutureTask`: 继承了FutureTask，说明是一个异步运算任务；最上层分别实现了Runnable、Future、Delayed接口，说明它是一个可以延迟执行的异步运算任务。
        + `DelayedWorkQueue`: 这是 ScheduledThreadPoolExecutor 为存储周期或延迟任务专门定义的一个延迟队列，继承了 AbstractQueue，为了契合 ThreadPoolExecutor 也实现了 BlockingQueue 接口。它内部只允许存储 RunnableScheduledFuture 类型的任务。与 DelayQueue 的不同之处就是它只允许存放 RunnableScheduledFuture 对象，并且自己实现了二叉堆(DelayQueue 是利用了 PriorityQueue 的二叉堆结构)
     
-    
+
+
+
+#### 3.13.4 Fork/Join框架
+
+#### 3.13.4.1 面试题
+
+1. Fork/Join主要用来解决什么样的问题?
+
+   Fork/Join框架是Java并发工具包中的一种可以将一个大任务拆分为很多小任务来异步执行的工具，自JDK1.7引入。
+
+2. Fork/Join框架主要包含哪三个模块? 模块之间的关系是怎么样的?
+
+   
+
+3. ForkJoinPool类继承关系?
+
+4. ForkJoinTask抽象类继承关系? 在实际运用中，我们一般都会继承 RecursiveTask 、RecursiveAction 或 CountedCompleter 来实现我们的业务需求，而不会直接继承 ForkJoinTask 类。
+
+5. 整个Fork/Join 框架的执行流程/运行机制是怎么样的?
+
+6. 具体阐述Fork/Join的分治思想和work-stealing 实现方式?
+
+7. 有哪些JDK源码中使用了Fork/Join思想?
+
+8. 如何使用Executors工具类创建ForkJoinPool?
+
+9. 写一个例子: 用ForkJoin方式实现1+2+3+...+100000?
+
+10. Fork/Join在使用时有哪些注意事项? 结合JDK中的斐波那契数列实例具体说明。
 
