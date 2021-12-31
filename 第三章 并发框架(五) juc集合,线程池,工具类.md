@@ -1403,5 +1403,876 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
        }
        ```
 
-       
 
+
+
+### 3.14.1 CountDownLatch详解
+
+#### 3.14.1.1 面试题
+
+1. 什么是CountDownLatch?
+
+   countDownLatch是一个juc工具类,它可以支持执行完多个线程之后(count变成0)执行另外的多个线程
+
+   从源码可知，其底层是由AQS提供支持，所以其数据结构可以参考AQS的数据结构，而AQS的数据结构核心就是两个虚拟队列: 同步队列sync queue 和条件队列condition queue，不同的条件会有不同的条件队列。CountDownLatch典型的用法是将一个程序分为n个互相独立的可解决任务，并创建值为n的CountDownLatch。当每一个任务完成时，都会在这个锁存器上调用countDown，等待问题被解决的任务调用这个锁存器的await，将他们自己拦住，直至锁存器计数结束。
+
+2. CountDownLatch底层原理
+
+   结合demo分析CountDownLatch原理
+
+   ```java
+   import java.util.concurrent.CountDownLatch;
+   
+   class MyThread extends Thread {
+       private CountDownLatch countDownLatch;
+       
+       public MyThread(String name, CountDownLatch countDownLatch) {
+           super(name);
+           this.countDownLatch = countDownLatch;
+       }
+       
+       public void run() {
+           System.out.println(Thread.currentThread().getName() + " doing something");
+           try {
+               Thread.sleep(1000);
+           } catch (InterruptedException e) {
+               e.printStackTrace();
+           }
+           System.out.println(Thread.currentThread().getName() + " finish");
+           countDownLatch.countDown();
+       }
+   }
+   
+   public class CountDownLatchDemo {
+       public static void main(String[] args) {
+           CountDownLatch countDownLatch = new CountDownLatch(2);
+           MyThread t1 = new MyThread("t1", countDownLatch);
+           MyThread t2 = new MyThread("t2", countDownLatch);
+           t1.start();
+           t2.start();
+           System.out.println("Waiting for t1 thread and t2 thread to finish");
+           try {
+               countDownLatch.await();
+           } catch (InterruptedException e) {
+               e.printStackTrace();
+           }            
+           System.out.println(Thread.currentThread().getName() + " continue");        
+       }
+   }
+   //某次的结果
+   //Waiting for t1 thread and t2 thread to finish
+   t1 doing something
+   t2 doing something
+   t1 finish
+   t2 finish
+   main continue
+   
+   ```
+
+   时序图
+
+   ![](resource\CountDownLatchTimeSeris.png)
+
+   说明: 首先main线程会调用await操作，此时main线程会被阻塞，等待被唤醒，之后t1线程执行了countDown操作，最后，t2线程执行了countDown操作，此时main线程就被唤醒了，可以继续运行。下面，进行详细分析。
+
+   1. countDownLatch.await调用如下,调用之后主线程被park
+
+   ![](resource\CountDonwLatchAwait.png)
+
+   2. t1线程执行countDownLatch.countDown操作，主要调用的函数如下
+
+      ![](resource\CountDownLatchCountDown.png)
+
+   3. t2线程执行countDownLatch.countDown操作，主要调用的函数如下
+
+      ![](resource\CountDownLatchCountDown2.png)
+
+   4. main线程获取cpu资源，继续运行，由于main线程是在parkAndCheckInterrupt函数中被禁止的，所以此时，继续在parkAndCheckInterrupt函数运行
+
+      ![](resource\CountDownLatchMainUnpark.png)
+
+      说明: main线程恢复，继续在parkAndCheckInterrupt函数中运行，之后又会回到最终达到的状态为AQS的state为0，并且head与tail指向同一个结点，该节点的额nextWaiter域还是指向SHARED结点。
+
+3. CountDownLatch一次可以唤醒几个任务?
+
+   因为await的时候使用的是tryAcquireShared(共享锁),所以唤醒的是多个任务
+
+4. CountDownLatch有哪些主要方法?
+
+   await(),countDown() 详见第二条面试题
+
+   await
+
+   ```java
+   public void await() throws InterruptedException {
+       // 转发到sync对象上
+       sync.acquireSharedInterruptibly(1);
+   }
+   public final void acquireSharedInterruptibly(int arg)
+           throws InterruptedException {
+       if (Thread.interrupted())
+           throw new InterruptedException();
+       if (tryAcquireShared(arg) < 0)
+           doAcquireSharedInterruptibly(arg);
+   }
+   protected int tryAcquireShared(int acquires) {
+       return (getState() == 0) ? 1 : -1;
+   }
+   private void doAcquireSharedInterruptibly(int arg) throws InterruptedException {
+       // 添加节点至等待队列
+       final Node node = addWaiter(Node.SHARED);
+       boolean failed = true;
+       try {
+           for (;;) { // 无限循环
+               // 获取node的前驱节点
+               final Node p = node.predecessor();
+               if (p == head) { // 前驱节点为头节点
+                   // 试图在共享模式下获取对象状态
+                   int r = tryAcquireShared(arg);
+                   if (r >= 0) { // 获取成功
+                       // 设置头节点并进行繁殖
+                       setHeadAndPropagate(node, r);
+                       // 设置节点next域
+                       p.next = null; // help GC
+                       failed = false;
+                       return;
+                   }
+               }
+               if (shouldParkAfterFailedAcquire(p, node) &&
+                   parkAndCheckInterrupt()) // 在获取失败后是否需要禁止线程并且进行中断检查
+                   // 抛出异常
+                   throw new InterruptedException();
+           }
+       } finally {
+           if (failed)
+               cancelAcquire(node);
+       }
+   }
+   private void setHeadAndPropagate(Node node, int propagate) {
+       // 获取头节点
+       Node h = head; // Record old head for check below
+       // 设置头节点
+       setHead(node);
+       /*
+           * Try to signal next queued node if:
+           *   Propagation was indicated by caller,
+           *     or was recorded (as h.waitStatus either before
+           *     or after setHead) by a previous operation
+           *     (note: this uses sign-check of waitStatus because
+           *      PROPAGATE status may transition to SIGNAL.)
+           * and
+           *   The next node is waiting in shared mode,
+           *     or we don't know, because it appears null
+           *
+           * The conservatism in both of these checks may cause
+           * unnecessary wake-ups, but only when there are multiple
+           * racing acquires/releases, so most need signals now or soon
+           * anyway.
+           */
+       // 进行判断
+       if (propagate > 0 || h == null || h.waitStatus < 0 ||
+           (h = head) == null || h.waitStatus < 0) {
+           // 获取节点的后继
+           Node s = node.next;
+           if (s == null || s.isShared()) // 后继为空或者为共享模式
+               // 以共享模式进行释放
+               doReleaseShared();
+       }
+   }
+   private void doReleaseShared() {
+       /*
+           * Ensure that a release propagates, even if there are other
+           * in-progress acquires/releases.  This proceeds in the usual
+           * way of trying to unparkSuccessor of head if it needs
+           * signal. But if it does not, status is set to PROPAGATE to
+           * ensure that upon release, propagation continues.
+           * Additionally, we must loop in case a new node is added
+           * while we are doing this. Also, unlike other uses of
+           * unparkSuccessor, we need to know if CAS to reset status
+           * fails, if so rechecking.
+           */
+       // 无限循环
+       for (;;) {
+           // 保存头节点
+           Node h = head;
+           if (h != null && h != tail) { // 头节点不为空并且头节点不为尾结点
+               // 获取头节点的等待状态
+               int ws = h.waitStatus; 
+               if (ws == Node.SIGNAL) { // 状态为SIGNAL
+                   if (!compareAndSetWaitStatus(h, Node.SIGNAL, 0)) // 不成功就继续
+                       continue;            // loop to recheck cases
+                   // 释放后继结点
+                   unparkSuccessor(h);
+               }
+               else if (ws == 0 &&
+                           !compareAndSetWaitStatus(h, 0, Node.PROPAGATE)) // 状态为0并且不成功，继续
+                   continue;                // loop on failed CAS
+           }
+           if (h == head) // 若头节点改变，继续循环  
+               break;
+       }
+   }
+   
+   ```
+
+   ![](resource\CountDownLatchAwaitDetail.png)
+
+   countDown
+
+   ```java
+   public void countDown() {
+       sync.releaseShared(1);
+   }
+   public final boolean releaseShared(int arg) {
+       if (tryReleaseShared(arg)) {
+           doReleaseShared();
+           return true;
+       }
+       return false;
+   }
+   protected boolean tryReleaseShared(int releases) {
+       // Decrement count; signal when transition to zero
+       // 无限循环
+       for (;;) {
+           // 获取状态
+           int c = getState();
+           if (c == 0) // 没有被线程占有
+               return false;
+           // 下一个状态
+           int nextc = c-1;
+           if (compareAndSetState(c, nextc)) // 比较并且设置成功
+               return nextc == 0;
+       }
+   }
+   private void doReleaseShared() {
+       /*
+           * Ensure that a release propagates, even if there are other
+           * in-progress acquires/releases.  This proceeds in the usual
+           * way of trying to unparkSuccessor of head if it needs
+           * signal. But if it does not, status is set to PROPAGATE to
+           * ensure that upon release, propagation continues.
+           * Additionally, we must loop in case a new node is added
+           * while we are doing this. Also, unlike other uses of
+           * unparkSuccessor, we need to know if CAS to reset status
+           * fails, if so rechecking.
+           */
+       // 无限循环
+       for (;;) {
+           // 保存头节点
+           Node h = head;
+           if (h != null && h != tail) { // 头节点不为空并且头节点不为尾结点
+               // 获取头节点的等待状态
+               int ws = h.waitStatus; 
+               if (ws == Node.SIGNAL) { // 状态为SIGNAL
+                   if (!compareAndSetWaitStatus(h, Node.SIGNAL, 0)) // 不成功就继续
+                       continue;            // loop to recheck cases
+                   // 释放后继结点
+                   unparkSuccessor(h);
+               }
+               else if (ws == 0 &&
+                           !compareAndSetWaitStatus(h, 0, Node.PROPAGATE)) // 状态为0并且不成功，继续
+                   continue;                // loop on failed CAS
+           }
+           if (h == head) // 若头节点改变，继续循环  
+               break;
+       }
+   }
+   
+   ```
+
+   ![](resource\CountDownLatchCountDownDetail.png)
+
+5. CountDownLatch适用于什么场景?
+
+   两组任务之间有依赖关系
+
+6. 实现一个容器，提供两个方法，add，size 写两个线程，线程1添加10个元素到容器中，线程2实现监控元素的个数，当个数到5个时，线程2给出提示并结束?
+
+   以下实现只是为了演示CountDownLatch,实际开发不会这么用
+
+   ```java
+   public class CountDownLanchTest {
+       //实现一个容器，提供两个方法，add，size 写两个线程，线程1添加10个元素到容器中，线程2实现监控元素的个数，当个数到5个时，线程2给出提示并结束
+       volatile List<Object> list=new ArrayList<>();
+       public CountDownLatch countDownLatch=new CountDownLatch(1);
+       void add(Object o){
+           list.add(o);
+       }
+       int getSize(){
+           return list.size();
+       }
+       public static void main(String[] args) throws InterruptedException {
+           CountDownLanchTest countDownLanchTest=new CountDownLanchTest();
+           A a=new A(countDownLanchTest);
+           B b=new B(countDownLanchTest);
+           new Thread(b).start();
+           Thread.sleep(1000);
+           new Thread(a).start();
+   
+       }
+       static class A implements Runnable{
+           CountDownLanchTest countDownLanchTest;
+           public A(CountDownLanchTest countDownLanchTest) {
+               this.countDownLanchTest=countDownLanchTest;
+           }
+           @Override
+           public void run() {
+               for(int i=0;i<10;i++){
+                   countDownLanchTest.add(new Object());
+                   System.out.println("线程"+Thread.currentThread().getName()+"添加第"+countDownLanchTest.getSize());
+                   if(i==4){
+                       countDownLanchTest.countDownLatch.countDown();
+                   }
+                   try {
+                       Thread.sleep(50);
+                   } catch (InterruptedException e) {
+                       e.printStackTrace();
+                   }
+   
+               }
+           }
+       }
+       static class B implements Runnable{
+           CountDownLanchTest countDownLanchTest;
+           public B(CountDownLanchTest countDownLanchTest) {
+               this.countDownLanchTest=countDownLanchTest;
+           }
+           @Override
+           public void run() {
+   
+               int size=countDownLanchTest.getSize();
+               if(size!=5){
+                   try {
+                       countDownLanchTest.countDownLatch.await();
+                   } catch (InterruptedException e) {
+                       e.printStackTrace();
+                   }
+               }
+               System.out.println("线程"+Thread.currentThread().getName()+"查看到集合数量"+countDownLanchTest.getSize()+"退出啦");
+           }
+       }
+   }
+   ```
+
+
+
+### 3.14.2  CyclicBarrier
+
+#### 3.14.2.1 面试题
+
+1. 什么是CyclicBarrier
+
+   对于CountDownLatch，其他线程为游戏玩家，比如英雄联盟，主线程为控制游戏开始的线程。在所有的玩家都准备好之前，主线程是处于等待状态的，也就是游戏不能开始。当所有的玩家准备好之后，下一步的动作实施者为主线程，即开始游戏。
+
+   对于CyclicBarrier，假设有一家公司要全体员工进行团建活动，活动内容为翻越三个障碍物，每一个人翻越障碍物所用的时间是不一样的。但是公司要求所有人在翻越当前障碍物之后再开始翻越下一个障碍物，也就是所有人翻越第一个障碍物之后，才开始翻越第二个，以此类推。类比地，每一个员工都是一个“其他线程”。当所有人都翻越的所有的障碍物之后，程序才结束。而主线程可能早就结束了，这里我们不用管主线程。
+
+2. CyclicBarrier底层实现原理
+
+   通过以下示例来讲解
+
+   ```java
+   import java.util.concurrent.BrokenBarrierException;
+   import java.util.concurrent.CyclicBarrier;
+   
+   class MyThread extends Thread {
+       private CyclicBarrier cb;
+       public MyThread(String name, CyclicBarrier cb) {
+           super(name);
+           this.cb = cb;
+       }
+       
+       public void run() {
+           System.out.println(Thread.currentThread().getName() + " going to await");
+           try {
+               cb.await();
+               System.out.println(Thread.currentThread().getName() + " continue");
+           } catch (Exception e) {
+               e.printStackTrace();
+           }
+       }
+   }
+   public class CyclicBarrierDemo {
+       public static void main(String[] args) throws InterruptedException, BrokenBarrierException {
+           CyclicBarrier cb = new CyclicBarrier(3, new Thread("barrierAction") {
+               public void run() {
+                   System.out.println(Thread.currentThread().getName() + " barrier action");
+                   
+               }
+           });
+           MyThread t1 = new MyThread("t1", cb);
+           MyThread t2 = new MyThread("t2", cb);
+           t1.start();
+           t2.start();
+           System.out.println(Thread.currentThread().getName() + " going to await");
+           cb.await();
+           System.out.println(Thread.currentThread().getName() + " continue");
+   
+       }
+   }
+   //某次可能的结果
+   t1 going to await
+   main going to await
+   t2 going to await
+   t2 barrier action
+   t2 continue
+   t1 continue
+   main continue
+   
+   ```
+
+   时序图
+
+   ![](resource\CyclicBarrierDemoTimeSeries.png)
+
+   1. 主线程执行await
+
+      ![](resource\CyclicBarrierDemoMainAwait.png)
+
+      说明: 由于ReentrantLock的默认采用非公平策略，所以在dowait函数中调用的是ReentrantLock.NonfairSync的lock函数，由于此时AQS的状态是0，表示还没有被任何线程占用，故main线程可以占用，之后在dowait中会调用trip.await函数，最终的结果是条件队列中存放了一个包含main线程的结点，并且被禁止运行了，同时，main线程所拥有的资源也被释放了，可以供其他线程获取。
+
+   2. t1线程执行await
+
+      ![](C:\Users\index-dev\Desktop\javamap\java-map\resource\CyclicBarrierDemoT1Await.png)
+
+      说明: 可以看到，之后condition queue(条件队列)里面有两个节点，包含t1线程的结点插入在队列的尾部，并且t1线程也被禁止了，因为执行了park操作，此时两个线程都被禁止了
+
+   3. t2线程执行await
+
+      ![](resource\CyclicBarrierDemoT2Await.png)
+
+      说明: 由上图可知，在t2线程执行await操作后，会直接执行command.run方法，不是重新开启一个线程，而是最后进入屏障的线程执行。同时，会将Condition queue中的所有节点都转移到Sync queue中，并且最后main线程会被unpark，可以继续运行。main线程获取cpu资源，继续运行。
+
+   4. main线程获取cpu资源，继续运行
+
+      ![](resource\CyclicBarrierDemoMainRun.png)
+
+      其中，由于main线程是在AQS.CO的wait中被park的，所以恢复时，会继续在该方法中运行。运行过后，t1线程被unpark，它获得cpu资源可以继续运行。
+
+   5. t1线程获取cpu资源，继续运行
+
+      ![](resource\CyclicBarrierDemoT1Run.png)
+
+      其中，由于t1线程是在AQS.CO的wait方法中被park，所以恢复时，会继续在该方法中运行。运行过后，Sync queue中保持着一个空节点。头节点与尾节点均指向它。
+
+      注意: 在线程await过程中中断线程会抛出异常，所有进入屏障的线程都将被释放。至于CyclicBarrier的其他用法，读者可以自行查阅API，不再累赘。
+
+   
+
+3. CountDownLatch和CyclicBarrier对比
+
+   1. countDownLatch是减计数器后执行主线程,cyclicBarrier是加计数器后将线程放到codition队列中(减计数器)并完成减等待进入屏障的线程数量(count)
+
+   2. countDownLatch减完之后不可重复,cyclicBarrier破坏屏障之后会createNewGeneration进入下一个循环
+
+      注:有资料说countDownLatch中下一步是主线程并不准确,下一步也可以是其他线程
+
+4. CyclicBarrier的核心函数有哪些
+
+   doAwait(),nextGeneration(),breakBarrier()
+
+   doAwait
+
+   ```java
+   private int dowait(boolean timed, long nanos)
+       throws InterruptedException, BrokenBarrierException,
+               TimeoutException {
+       // 保存当前锁
+       final ReentrantLock lock = this.lock;
+       // 锁定
+       lock.lock();
+       try {
+           // 保存当前代
+           final Generation g = generation;
+           
+           if (g.broken) // 屏障被破坏，抛出异常
+               throw new BrokenBarrierException();
+   
+           if (Thread.interrupted()) { // 线程被中断
+               // 损坏当前屏障，并且唤醒所有的线程，只有拥有锁的时候才会调用
+               breakBarrier();
+               // 抛出异常
+               throw new InterruptedException();
+           }
+           
+           // 减少正在等待进入屏障的线程数量
+           int index = --count;
+           if (index == 0) {  // 正在等待进入屏障的线程数量为0，所有线程都已经进入
+               // 运行的动作标识
+               boolean ranAction = false;
+               try {
+                   // 保存运行动作
+                   final Runnable command = barrierCommand;
+                   if (command != null) // 动作不为空
+                       // 运行
+                       command.run();
+                   // 设置ranAction状态
+                   ranAction = true;
+                   // 进入下一代
+                   nextGeneration();
+                   return 0;
+               } finally {
+                   if (!ranAction) // 没有运行的动作
+                       // 损坏当前屏障
+                       breakBarrier();
+               }
+           }
+   
+           // loop until tripped, broken, interrupted, or timed out
+           // 无限循环
+           for (;;) {
+               try {
+                   if (!timed) // 没有设置等待时间
+                       // 等待
+                       trip.await(); 
+                   else if (nanos > 0L) // 设置了等待时间，并且等待时间大于0
+                       // 等待指定时长
+                       nanos = trip.awaitNanos(nanos);
+               } catch (InterruptedException ie) { 
+                   if (g == generation && ! g.broken) { // 等于当前代并且屏障没有被损坏
+                       // 损坏当前屏障
+                       breakBarrier();
+                       // 抛出异常
+                       throw ie;
+                   } else { // 不等于当前带后者是屏障被损坏
+                       // We're about to finish waiting even if we had not
+                       // been interrupted, so this interrupt is deemed to
+                       // "belong" to subsequent execution.
+                       // 中断当前线程
+                       Thread.currentThread().interrupt();
+                   }
+               }
+   
+               if (g.broken) // 屏障被损坏，抛出异常
+                   throw new BrokenBarrierException();
+   
+               if (g != generation) // 不等于当前代
+                   // 返回索引
+                   return index;
+   
+               if (timed && nanos <= 0L) { // 设置了等待时间，并且等待时间小于0
+                   // 损坏屏障
+                   breakBarrier();
+                   // 抛出异常
+                   throw new TimeoutException();
+               }
+           }
+       } finally {
+           // 释放锁
+           lock.unlock();
+       }
+   }
+   ```
+
+   ![](resource\CyclicBarrierDoAwait.png)
+
+### nextGeneration
+
+```java
+private void nextGeneration() {
+    // signal completion of last generation
+    // 唤醒所有线程
+    trip.signalAll();
+    // set up next generation
+    // 恢复正在等待进入屏障的线程数量
+    count = parties;
+    // 新生一代
+    generation = new Generation();
+}
+public final void signalAll() {
+    if (!isHeldExclusively()) // 不被当前线程独占，抛出异常
+        throw new IllegalMonitorStateException();
+    // 保存condition队列头节点
+    Node first = firstWaiter;
+    if (first != null) // 头节点不为空
+        // 唤醒所有等待线程
+        doSignalAll(first);
+}
+private void doSignalAll(Node first) {
+    // condition队列的头节点尾结点都设置为空
+    lastWaiter = firstWaiter = null;
+    // 循环
+    do {
+        // 获取first结点的nextWaiter域结点
+        Node next = first.nextWaiter;
+        // 设置first结点的nextWaiter域为空
+        first.nextWaiter = null;
+        // 将first结点从condition队列转移到sync队列
+        transferForSignal(first);
+        // 重新设置first
+        first = next;
+    } while (first != null);
+}
+final boolean transferForSignal(Node node) {
+    /*
+        * If cannot change waitStatus, the node has been cancelled.
+        */
+    if (!compareAndSetWaitStatus(node, Node.CONDITION, 0))
+        return false;
+
+    /*
+        * Splice onto queue and try to set waitStatus of predecessor to
+        * indicate that thread is (probably) waiting. If cancelled or
+        * attempt to set waitStatus fails, wake up to resync (in which
+        * case the waitStatus can be transiently and harmlessly wrong).
+        */
+    Node p = enq(node);
+    int ws = p.waitStatus;
+    if (ws > 0 || !compareAndSetWaitStatus(p, ws, Node.SIGNAL))
+        LockSupport.unpark(node.thread);
+    return true;
+}
+private Node enq(final Node node) {
+    for (;;) { // 无限循环，确保结点能够成功入队列
+        // 保存尾结点
+        Node t = tail;
+        if (t == null) { // 尾结点为空，即还没被初始化
+            if (compareAndSetHead(new Node())) // 头节点为空，并设置头节点为新生成的结点
+                tail = head; // 头节点与尾结点都指向同一个新生结点
+        } else { // 尾结点不为空，即已经被初始化过
+            // 将node结点的prev域连接到尾结点
+            node.prev = t; 
+            if (compareAndSetTail(t, node)) { // 比较结点t是否为尾结点，若是则将尾结点设置为node
+                // 设置尾结点的next域为node
+                t.next = node; 
+                return t; // 返回尾结点
+            }
+        }
+    }
+}
+```
+
+![](resource\CyclicBarrierNewGeneration.png)
+
+breakBarrier
+
+```java
+private void breakBarrier() {
+    // 设置状态
+    generation.broken = true;
+    // 恢复正在等待进入屏障的线程数量
+    count = parties;
+    // 唤醒所有线程
+    trip.signalAll();
+}
+```
+
+
+
+
+
+### 3.14.3 semaphore
+
+#### 3.14.3.1 面试题
+
+1. 什么是Semaphore
+
+   Semaphore底层是基于AbstractQueuedSynchronizer来实现的。Semaphore称为计数信号量，它允许n个任务同时访问某个资源，可以将信号量看做是在向外分发使用资源的许可证，只有成功获取许可证，才能使用资源。
+
+2. Semaphore内部原理
+
+   通过demo来讲解原理
+
+   ```java
+   import java.util.concurrent.Semaphore;
+   
+   class MyThread extends Thread {
+       private Semaphore semaphore;
+       public MyThread(String name, Semaphore semaphore) {
+           super(name);
+           this.semaphore = semaphore;
+       }
+       public void run() {        
+           int count = 3;
+           System.out.println(Thread.currentThread().getName() + " trying to acquire");
+           try {
+               semaphore.acquire(count);
+               System.out.println(Thread.currentThread().getName() + " acquire successfully");
+               Thread.sleep(1000);
+           } catch (InterruptedException e) {
+               e.printStackTrace();
+           } finally {
+               semaphore.release(count);
+               System.out.println(Thread.currentThread().getName() + " release successfully");
+           }
+       }
+   }
+   
+   public class SemaphoreDemo {
+       public final static int SEM_SIZE = 10;
+       
+       public static void main(String[] args) {
+           Semaphore semaphore = new Semaphore(SEM_SIZE);
+           MyThread t1 = new MyThread("t1", semaphore);
+           MyThread t2 = new MyThread("t2", semaphore);
+           t1.start();
+           t2.start();
+           int permits = 5;
+           System.out.println(Thread.currentThread().getName() + " trying to acquire");
+           try {
+               semaphore.acquire(permits);
+               System.out.println(Thread.currentThread().getName() + " acquire successfully");
+               Thread.sleep(1000);
+           } catch (InterruptedException e) {
+               e.printStackTrace();
+           } finally {
+               semaphore.release();
+               System.out.println(Thread.currentThread().getName() + " release successfully");
+           }      
+       }
+   }
+   //可能的结果
+   main trying to acquire
+   main acquire successfully
+   t1 trying to acquire
+   t1 acquire successfully
+   t2 trying to acquire
+   t1 release successfully
+   main release successfully
+   t2 acquire successfully
+   t2 release successfully
+   ```
+
+   时序图
+
+   ![](resource\SemaphoreTimeSeries.png)
+
+   1. main线程执行acquire
+
+      ![](resource\SemaphoreMainAcquire.png)
+
+      此时，可以看到只是AQS的state变为了5，main线程并没有被阻塞，可以继续运行
+
+   2. t1线程执行acquire
+
+   ![](resource\SemaphoreT1Acquire.png)
+
+   3. t2执行acquire
+
+      ![](resource\SemaphoreT2Acquire.png)
+
+      此时，t2线程获取许可不会成功，之后会导致其被禁止运行，值得注意的是，AQS的state还是为2。
+
+   4. t1执行semaphore.release操作
+
+      ![](resource\SemaphoreT1Release.png)
+
+      此时，t2线程将会被unpark，并且AQS的state为5，t2获取cpu资源后可以继续运行。
+
+   5. main线程执行semaphore.release操作。
+
+      ![](resource\SemaphoreMainRelease.png)
+
+      此时，t2线程还会被unpark，但是不会产生影响，此时，只要t2线程获得CPU资源就可以运行了。此时，AQS的state为10
+
+   6. t2获取CPU资源，继续运行，此时t2需要恢复现场，回到parkAndCheckInterrupt函数中，也是在should继续运行
+
+      ![](resource\SemaphoreT2Run.png)
+
+      此时，可以看到，Sync queue中只有一个结点，头节点与尾节点都指向该结点，在setHeadAndPropagate的函数中会设置头节点并且会unpark队列中的其他结点。
+
+   7. t2线程执行semaphore.release操作。
+
+      ![](resource\SemaphoreT2Release.png)
+
+       t2线程经过release后，此时信号量的许可又变为10个了，此时Sync queue中的结点还是没有变化。
+
+3. Semaphore常用方法有哪些? 如何实现线程同步和互斥的
+
+   acquire(),release()
+
+   1. acquire
+
+      ```java
+      public void acquire() throws InterruptedException {
+          sync.acquireSharedInterruptibly(1);
+      }
+      ```
+
+      ![](resource\SemaphoreAcquire.png)
+
+      注意:在第5步中会调用addWaiter方法将当前线程放到同步队列中,在发现获取不到执行权限后自己阻塞,被唤醒后死循环执行第6-7步尝试再次获取执行权限
+
+   2. release
+
+      ```java
+      public void release() {
+          sync.releaseShared(1);
+      }
+      ```
+
+      ![](resource\SemaphoreRelease.png)
+
+4. Semaphore适合用在什么场景
+
+   适用多个线程同时访问共享资源的情况下限制同时访问的数量
+
+5. 单独使用Semaphore是不会使用到AQS的条件队列
+
+   不同于CyclicBarrier和ReentrantLock，单独使用Semaphore是不会使用到AQS的条件队列的，其实，只有进行await操作才会进入条件队列，其他的都是在同步队列中，只是当前线程会被park
+
+6. 关于Semaphore的几个问题
+
+   + Semaphore初始化有10个令牌，11个线程同时各调用1次acquire方法，会发生什么?
+
+     一个线程无法获取令牌阻塞
+
+   + Semaphore初始化有10个令牌，一个线程重复调用11次acquire方法，会发生什么?
+
+     第11次阻塞,没有类似锁的可重入概念,也没有其他线程会唤醒他
+
+   + Semaphore初始化有1个令牌，1个线程调用一次acquire方法，然后调用两次release方法，之后另外一个线程调用acquire(2)方法，此线程能够获取到足够的令牌并继续运行吗?
+
+     能,release方法增加令牌,而且令牌数量可以大于默认值
+
+   + Semaphore初始化有2个令牌，一个线程调用1次release方法，然后一次性获取3个令牌，会获取到吗?
+
+     能,同上,而且semaphore没有对acquire和release方法的顺序限制,只要调用release就会增加令牌数量
+
+
+
+### 3.14.4 Phaser
+
+#### 3.14.4.1 面试题
+
+1. Phaser主要解决什么问题?与CyclicBarrier和CountDownLatch有什么区别
+
+   Phaser又称“阶段器”，用来解决控制多个线程分阶段共同完成任务的情景问题。它与CountDownLatch和CyclicBarrier类似，都是等待一组线程完成工作后再执行下一步，协调线程的工作。但在CountDownLatch和CyclicBarrier中我们都不可以动态的配置parties，而Phaser可以动态注册需要协调的线程，相比CountDownLatch和CyclicBarrier就会变得更加灵活。
+
+2. 如果使用CountDownLatch实现Phaser的功能如何实现
+
+   //TODO
+
+3. Phaser的运行机制
+
+   ![](resource\ParserRun.png)
+
+   + **Registration(注册)**
+
+     跟其他barrier不同，在phaser上注册的parties会随着时间的变化而变化。任务可以随时注册(使用方法register,bulkRegister注册，或者由构造器确定初始parties)，并且在任何抵达点可以随意地撤销注册(方法arriveAndDeregister)。就像大多数基本的同步结构一样，注册和撤销只影响内部count；不会创建更深的内部记录，所以任务不能查询他们是否已经注册。(不过，可以通过继承来实现类似的记录)
+
+   + **Synchronization(同步机制)**
+
+     和CyclicBarrier一样，Phaser也可以重复await。方法arriveAndAwaitAdvance的效果类似CyclicBarrier.await。phaser的每一代都有一个相关的phase number，初始值为0，当所有注册的任务都到达phaser时phase+1，到达最大值(Integer.MAX_VALUE)之后清零。使用phase number可以独立控制 到达phaser 和 等待其他线程 的动作，通过下面两种类型的方法:
+
+     > - **Arrival(到达机制)** arrive和arriveAndDeregister方法记录到达状态。这些方法不会阻塞，但是会返回一个相关的arrival phase number；也就是说，phase number用来确定到达状态。当所有任务都到达给定phase时，可以执行一个可选的函数，这个函数通过重写onAdvance方法实现，通常可以用来控制终止状态。重写此方法类似于为CyclicBarrier提供一个barrierAction，但比它更灵活。
+     > - **Waiting(等待机制)** awaitAdvance方法需要一个表示arrival phase number的参数，并且在phaser前进到与给定phase不同的phase时返回。和CyclicBarrier不同，即使等待线程已经被中断，awaitAdvance方法也会一直等待。中断状态和超时时间同样可用，但是当任务等待中断或超时后未改变phaser的状态时会遭遇异常。如果有必要，在方法forceTermination之后可以执行这些异常的相关的handler进行恢复操作，Phaser也可能被ForkJoinPool中的任务使用，这样在其他任务阻塞等待一个phase时可以保证足够的并行度来执行任务。
+
+   + **Termination(终止机制)**
+
+     可以用isTerminated方法检查phaser的终止状态。在终止时，所有同步方法立刻返回一个负值。在终止时尝试注册也没有效果。当调用onAdvance返回true时Termination被触发。当deregistration操作使已注册的parties变为0时，onAdvance的默认实现就会返回true。也可以重写onAdvance方法来定义终止动作。forceTermination方法也可以释放等待线程并且允许它们终止。
+
+   + **Tiering(分层结构)**
+
+     Phaser支持分层结构(树状构造)来减少竞争。注册了大量parties的Phaser可能会因为同步竞争消耗很高的成本， 因此可以设置一些子Phaser来共享一个通用的parent。这样的话即使每个操作消耗了更多的开销，但是会提高整体吞吐量。 在一个分层结构的phaser里，子节点phaser的注册和取消注册都通过父节点管理。子节点phaser通过构造或方法register、bulkRegister进行首次注册时，在其父节点上注册。子节点phaser通过调用arriveAndDeregister进行最后一次取消注册时，也在其父节点上取消注册。
+
+   + **Monitoring(状态监控)** 
+
+     由于同步方法可能只被已注册的parties调用，所以phaser的当前状态也可能被任何调用者监控。在任何时候，可以通过getRegisteredParties获取parties数，其中getArrivedParties方法返回已经到达当前phase的parties数。当剩余的parties(通过方法getUnarrivedParties获取)到达时，phase进入下一代。这些方法返回的值可能只表示短暂的状态，所以一般来说在同步结构里并没有啥卵用。
+
+     
+
+4. Phaser的使用实例
+
+   
+
+   
