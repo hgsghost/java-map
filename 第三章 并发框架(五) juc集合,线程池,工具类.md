@@ -2273,6 +2273,316 @@ private void breakBarrier() {
 
 4. Phaser的使用实例
 
+   ```java
+   import java.util.concurrent.Phaser;
    
+   public class PhaserTest {
+   
+       public static void main(String[] args) throws InterruptedException {
+           Phaser phaser=new Phaser(2){
+               @Override
+               protected boolean onAdvance(int phase, int registeredParties) {
+                   System.out.println("所有任务到达步进节点"+phase);
+                   return registeredParties == 0;
+               }
+           };
+           //1.register方法
+           phaser.register();//注册到phaser
+           phaser.register();//注册到phaser
+           //2.bulkRegister(1)方法
+           phaser.bulkRegister(2);//注册数+2
+           System.out.println("注册的phaser数为"+phaser.getRegisteredParties());//注册的parties数为6
+           /*
+           3.arrive方法
+   
+           到达后不阻塞直接执行
+           同一个线程可以arrive6次到达下一个注册为6的phase
+           因为注册数为6,所以每个phase版本只能 arrive() 注册的次数
+           否则会报错 java.lang.IllegalStateException: Attempted arrival of unregistered party for PhaserTest$1@59e410f2[phase = 0 parties = 6 arrived = 6]*/
+   
+           /*for(int i=0;i<6;i++){
+               new Thread(new Runnable() {
+                   @Override
+                   public void run() {
+                       while (true){
+                           try {
+                               Thread.sleep((int)(10000*Math.random()));
+                           } catch (InterruptedException e) {
+                               e.printStackTrace();
+                           }
+                           System.out.println(Thread.currentThread()+"arrive");
+                           phaser.arrive();
+                           System.out.println(Thread.currentThread()+"继续执行了");
+                       }
+                   }
+               }).start();
+           }
+           //4.arriveAndAwaitAdvance方法
+           /*到达后阻塞等待*/
+          /* for(int i=0;i<6;i++){
+               new Thread(new Runnable() {
+                   @Override
+                   public void run() {
+                       try {
+                           Thread.sleep((int)(10000*Math.random()));
+                       } catch (InterruptedException e) {
+                           e.printStackTrace();
+                       }
+                       System.out.println(Thread.currentThread().getName()+"执行完毕,当前阶段"+phaser.getPhase());
+                       phaser.arriveAndAwaitAdvance();
+                       System.out.println(Thread.currentThread().getName()+"进入下一个phase,当前阶段"+phaser.getPhase());
+                   }
+               }).start();
+           }*/
+           //5.arriveAndDeregister()
+           /*到达后直接取消注册*/
+           /*for(int i=0;i<6;i++){
+               new Thread(new Runnable() {
+                   @Override
+                   public void run() {
+                       try {
+                           Thread.sleep((int)(1000*Math.random()));
+                       } catch (InterruptedException e) {
+                           e.printStackTrace();
+                       }
+                       System.out.println(Thread.currentThread().getName()+"执行完毕,当前阶段"+phaser.getPhase()+"注册数"+phaser.getRegisteredParties());
+                       phaser.arriveAndDeregister();
+                       System.out.println(Thread.currentThread().getName()+"进入下一个phase,当前阶段"+phaser.getPhase()+"注册数"+phaser.getRegisteredParties());
+                   }
+               }).start();
+           }
+           Thread.sleep(1000);*/
+           //6.phaser.awaitAdvance(0)方法 参数是一个phase阶段  awaitAdvance(arrive())等同于 arriveAndAwaitAdvance()
+           //当参数和当前phase相等时才会阻塞
+           for(int i=0;i<6;i++){
+               new Thread(new Runnable() {
+                   @Override
+                   public void run() {
+                       try {
+                           Thread.sleep((int)(1000*Math.random()));
+                       } catch (InterruptedException e) {
+                           e.printStackTrace();
+                       }
+                       System.out.println(Thread.currentThread().getName()+"执行完毕,当前阶段"+phaser.getPhase()+"注册数"+phaser.getRegisteredParties());
+                       phaser.awaitAdvance(2);
+                       System.out.println(Thread.currentThread().getName()+"进入下一个phase,当前阶段"+phaser.getPhase()+"注册数"+phaser.getRegisteredParties());
+                   }
+               }).start();
+           }
+           Thread.sleep(10000);
+           System.out.println("当前阶段"+phaser.getPhase()+"注册数"+phaser.getRegisteredParties());
+           //7.awaitAdvanceInterruptibly
+           //和awaitAdvance类似 不过这个支持中断
+           //8.forceTermination
+           //可以释放等待线程并且允许它们终止
+           /*
+           phaser.arriveAndAwaitAdvance();
+           phaser.arriveAndDeregister();
+           phaser.arrive();
+           phaser.awaitAdvance(0);
+           phaser.awaitAdvanceInterruptibly(1);
+           phaser.forceTermination();
+           */
+       }
+   }
+   ```
 
+### 3.14.5 Exchange
+
+Exchanger是用于线程协作的工具类, 主要用于两个线程之间的数据交换
+
+#### 3.14.5.1 面试题
+
+1. Exchanger主要解决了什么问题
+
+   主要用于**两个**线程之间的数据交换
+
+2. 对比SynchronousQueue，为什么说Exchanger可被视为 SynchronousQueue 的双向形式
+
+   Exchanger是一种线程间安全交换数据的机制。可以和之前分析过的SynchronousQueue对比一下：线程A通过SynchronousQueue将数据a交给线程B；线程A通过Exchanger和线程B交换数据，线程A把数据a交给线程B，同时线程B把数据b交给线程A。可见，SynchronousQueue是交给一个数据，Exchanger是交换两个数据。
+
+3. Exchanger在不同的JDK版本中实现有什么差别
+
+   + 在JDK5中Exchanger被设计成一个容量为1的容器，存放一个等待线程，直到有另外线程到来就会发生数据交换，然后清空容器，等到下一个到来的线程。
+   + 从JDK6开始，Exchanger用了类似ConcurrentMap的分段思想，提供了多个slot，增加了并发执行时的吞吐量
+
+4. Exchanger实现机制
+
+   伪代码如下
+
+   ```java
+   /*
+   比如有2条线程A和B，A线程交换数据时，发现slot为空，则将需要交换的数据放在slot中等待其它线程进来交换数据，等线程B进来，读取A设置的数据，然后设置线程B需要交换的数据，然后唤醒A线程，原理就是这么简单。但是当多个线程之间进行交换数据时就会出现问题，所以Exchanger加入了slot数组。*/
+   for (;;) {
+       if (slot is empty) { // offer
+           // slot为空时，将item 设置到Node 中        
+           place item in a Node;
+           if (can CAS slot from empty to node) {
+               // 当将node通过CAS交换到slot中时，挂起线程等待被唤醒
+               wait for release;
+               // 被唤醒后返回node中匹配到的item
+               return matching item in node;
+           }
+       } else if (can CAS slot from node to empty) { // release
+            // 将slot设置为空
+           // 获取node中的item，将需要交换的数据设置到匹配的item
+           get the item in node;
+           set matching item in node;
+           // 唤醒等待的线程
+           release waiting thread;
+       }
+       // else retry on CAS failure
+   }
+   ```
+
+5. Exchanger已经有了slot单节点，为什么会加入arena node数组? 什么时候会用到数组
+
+   slot为单个槽，arena为数组槽, 他们都是Node类型。在这里可能会感觉到疑惑，slot作为Exchanger交换数据的场景，应该只需要一个就可以了啊? 为何还多了一个Participant 和数组类型的arena呢? 一个slot交换场所原则上来说应该是可以的，但实际情况却不是如此，多个参与者使用同一个交换场所时，会存在严重伸缩性问题。既然单个交换场所存在问题，那么我们就安排多个，也就是数组arena。通过数组arena来安排不同的线程使用不同的slot来降低竞争问题，并且可以保证最终一定会成对交换数据。但是**Exchanger不是一来就会生成arena数组来降低竞争，只有当产生竞争是才会生成arena数组**。
+
+6. arena可以确保不同的slot在arena中是不会相冲突的，那么是怎么保证的呢
+
+   //TODO
+
+7. 什么是伪共享，Exchanger中如何体现的
+
+   **伪共享说明**：假设一个类的两个相互独立的属性a和b在内存地址上是连续的(比如FIFO队列的头尾指针)，那么它们通常会被加载到相同的cpu cache line里面。并发情况下，如果一个线程修改了a，会导致整个cache line失效(包括b)，这时另一个线程来读b，就需要从内存里再次加载了，这种多线程频繁修改ab的情况下，虽然a和b看似独立，但它们会互相干扰，非常影响性能。
+
+   我们再看Node节点的定义, 在Java 8 中我们是可以利用sun.misc.Contended来规避伪共享的。所以说通过 << ASHIFT方式加上sun.misc.Contended，所以使得任意两个可用Node不会再同一个缓存行中。
+
+8. Exchanger实现举例
+
+   ```java
+   public class Test {
+       static class Producer extends Thread {
+           private Exchanger<Integer> exchanger;
+           private static int data = 0;
+           Producer(String name, Exchanger<Integer> exchanger) {
+               super("Producer-" + name);
+               this.exchanger = exchanger;
+           }
    
+           @Override
+           public void run() {
+               for (int i=1; i<5; i++) {
+                   try {
+                       TimeUnit.SECONDS.sleep(1);
+                       data = i;
+                       System.out.println(getName()+" 交换前:" + data);
+                       data = exchanger.exchange(data);
+                       System.out.println(getName()+" 交换后:" + data);
+                   } catch (InterruptedException e) {
+                       e.printStackTrace();
+                   }
+               }
+           }
+       }
+   
+       static class Consumer extends Thread {
+           private Exchanger<Integer> exchanger;
+           private static int data = 0;
+           Consumer(String name, Exchanger<Integer> exchanger) {
+               super("Consumer-" + name);
+               this.exchanger = exchanger;
+           }
+   
+           @Override
+           public void run() {
+               while (true) {
+                   data = 0;
+                   System.out.println(getName()+" 交换前:" + data);
+                   try {
+                       TimeUnit.SECONDS.sleep(1);
+                       data = exchanger.exchange(data);
+                   } catch (InterruptedException e) {
+                       e.printStackTrace();
+                   }
+                   System.out.println(getName()+" 交换后:" + data);
+               }
+           }
+       }
+   
+       public static void main(String[] args) throws InterruptedException {
+           Exchanger<Integer> exchanger = new Exchanger<Integer>();
+           new Producer("", exchanger).start();
+           new Consumer("", exchanger).start();
+           TimeUnit.SECONDS.sleep(7);
+           System.exit(-1);
+       }
+   }
+   //可能结果
+   Consumer- 交换前:0
+   Producer- 交换前:1
+   Consumer- 交换后:1
+   Consumer- 交换前:0
+   Producer- 交换后:0
+   Producer- 交换前:2
+   Producer- 交换后:0
+   Consumer- 交换后:2
+   Consumer- 交换前:0
+   Producer- 交换前:3
+   Producer- 交换后:0
+   Consumer- 交换后:3
+   Consumer- 交换前:0
+   Producer- 交换前:4
+   Producer- 交换后:0
+   Consumer- 交换后:4
+   Consumer- 交换前:0
+   
+   ```
+
+### 3.14.6 ThreadLocal
+
+注:ThreadLocal本质是通过Map将当前线程作为key存储对象,如果存储的是线程共享对象,无法达到保证线程安全的目的
+
+构造方法中给ThreadLocal赋值无法在线程的run方法中使用(构造方法是main线程调用,会放到main线程的ThreadLocal中)
+
+```java
+public class ThreadLocalTest {
+    public int num= 0;
+    public static void main(String[] args) throws InterruptedException {
+        ThreadLocalTest threadLocalTest = new ThreadLocalTest();
+        new MyThread(threadLocalTest).start();
+        new MyThread(threadLocalTest).start();
+        Thread.sleep(1000);
+        threadLocalTest.num=5;
+        System.out.println(Thread.currentThread().getName()+":"+threadLocalTest.num);
+    }
+    static class MyThread extends Thread{
+        private static ThreadLocal<ThreadLocalTest> threadLocal =new ThreadLocal();
+        private ThreadLocalTest threadLocalTest;
+        public MyThread(ThreadLocalTest threadLocalTest) {
+            this.threadLocalTest=threadLocalTest;
+            //System.out.println(Thread.currentThread().getName()+":"+threadLocal.get().num);
+        }
+        @Override
+        public void run() {
+            threadLocal.set(threadLocalTest);
+            System.out.println(Thread.currentThread().getName()+":"+threadLocal.get().num);
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            System.out.println(Thread.currentThread().getName()+":"+threadLocal.get().num);
+            //System.out.println(Thread.currentThread().getName()+":"+threadLocal.get().num);
+        }
+    }
+}
+//结果
+Thread-1:0
+Thread-0:0
+main:5
+Thread-1:5
+Thread-0:5
+```
+
+
+
+#### 3.14.6.1 面试题
+
+1. 什么是ThreadLocal? 用来解决什么问题的
+2. 说说你对ThreadLocal的理解
+3. ThreadLocal是如何实现线程隔离的
+4. 为什么ThreadLocal会造成内存泄露? 如何解决
+5. 还有哪些使用ThreadLocal的应用场景
+
