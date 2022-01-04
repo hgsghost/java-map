@@ -2581,8 +2581,706 @@ Thread-0:5
 #### 3.14.6.1 面试题
 
 1. 什么是ThreadLocal? 用来解决什么问题的
+
+   ThreadLocal是一个将在多线程中为每一个线程创建单独的变量副本的类; 当使用ThreadLocal来维护变量时, ThreadLocal会为每个线程创建单独的变量副本, 避免因多线程操作共享变量而导致的数据不一致的情况。
+
 2. 说说你对ThreadLocal的理解
+
+   ThreadLocal实际上是将当前线程作为key,将目标对象作为v存放到ThreadLocalMap中,适合存放线程间没有关联的对象,例如session/数据库链接,各个线程之间相互独立
+
 3. ThreadLocal是如何实现线程隔离的
+
+   主要是用到了Thread对象中的一个ThreadLocalMap类型的变量threadLocals, 负责存储当前线程的目标对象, threadLocal变量为Key, 以新建的Connection对象为Value; 这样的话, 线程第一次读取的时候如果不存在就会调用ThreadLocal的initialValue方法创建一个Connection对象并且返回;
+
+   Thread.threadLocals 是每个线程对象的ThreadLocalMap<ThreadLocal,object>
+
+   再从ThreadLocalMap中用当前的ThreadLocal对象获取目标对象
+
+   ```java
+   public T get() {
+       Thread t = Thread.currentThread();
+       ThreadLocalMap map = getMap(t);
+       if (map != null) {
+           ThreadLocalMap.Entry e = map.getEntry(this);
+           if (e != null) {
+               @SuppressWarnings("unchecked")
+               T result = (T)e.value;
+               return result;
+           }
+       }
+       return setInitialValue();
+   }
+   ```
+
+   
+
 4. 为什么ThreadLocal会造成内存泄露? 如何解决
+
+   ```java
+   import java.util.concurrent.LinkedBlockingQueue;
+   import java.util.concurrent.ThreadPoolExecutor;
+   import java.util.concurrent.TimeUnit;
+   //ThreadLocal内存泄漏demo
+   public class ThreadLocalDemo {
+       static class LocalVariable {
+           private Long[] a = new Long[1024 * 1024];
+       }
+   
+       // (1)
+       final static ThreadPoolExecutor poolExecutor = new ThreadPoolExecutor(5, 5, 1, TimeUnit.MINUTES,
+               new LinkedBlockingQueue<>());
+       // (2)
+       final static ThreadLocal<LocalVariable> localVariable = new ThreadLocal<LocalVariable>();
+   
+       public static void main(String[] args) throws InterruptedException {
+           // (3)
+           Thread.sleep(5000 * 4);
+           for (int i = 0; i < 50; ++i) {
+               poolExecutor.execute(new Runnable() {
+                   public void run() {
+                       // (4)
+                       localVariable.set(new LocalVariable());
+                       // (5)
+                       System.out.println("use local varaible" + localVariable.get());
+                       localVariable.remove();
+                   }
+               });
+           }
+           // (6)
+           System.out.println("pool execute over");
+       }
+   }
+   ```
+
+   如果用线程池来操作ThreadLocal 对象确实会造成内存泄露, 因为对于线程池里面不会销毁的线程, 里面总会存在着`<ThreadLocal, LocalVariable>`的强引用, 因为final static 修饰的 ThreadLocal 并不会释放, 而ThreadLocalMap 对于 Key 虽然是弱引用, 但是强引用不会释放, 弱引用当然也会一直有值, 同时创建的LocalVariable对象也不会释放, 就造成了内存泄露; 如果LocalVariable对象不是一个大对象的话, 其实泄露的并不严重, `泄露的内存 = 核心线程数 * LocalVariable`对象的大小;
+
+   所以, 为了避免出现内存泄露的情况, ThreadLocal提供了一个清除线程中对象的方法, 即 remove, 其实内部实现就是调用 ThreadLocalMap 的remove方法:
+
+   ```java
+   private void remove(ThreadLocal<?> key) {
+       Entry[] tab = table;
+       int len = tab.length;
+       int i = key.threadLocalHashCode & (len-1);
+       for (Entry e = tab[i];
+            e != null;
+            e = tab[i = nextIndex(i, len)]) {
+           if (e.get() == key) {
+               e.clear();
+               expungeStaleEntry(i);
+               return;
+           }
+       }
+   }
+   ```
+
+   
+
 5. 还有哪些使用ThreadLocal的应用场景
+
+   线程中存储独立的对象
+
+   ```java
+   public class ThreadLocalTest implements Runnable{
+       
+       ThreadLocal<Student> StudentThreadLocal = new ThreadLocal<Student>();
+   
+       @Override
+       public void run() {
+           String currentThreadName = Thread.currentThread().getName();
+           System.out.println(currentThreadName + " is running...");
+           Random random = new Random();
+           int age = random.nextInt(100);
+           System.out.println(currentThreadName + " is set age: "  + age);
+           Student Student = getStudentt(); //通过这个方法，为每个线程都独立的new一个Studentt对象，每个线程的的Studentt对象都可以设置不同的值
+           Student.setAge(age);
+           System.out.println(currentThreadName + " is first get age: " + Student.getAge());
+           try {
+               Thread.sleep(500);
+           } catch (InterruptedException e) {
+               e.printStackTrace();
+           }
+           System.out.println( currentThreadName + " is second get age: " + Student.getAge());
+           
+       }
+       
+       private Student getStudentt() {
+           Student Student = StudentThreadLocal.get();
+           if (null == Student) {
+               Student = new Student();
+               StudentThreadLocal.set(Student);
+           }
+           return Student;
+       }
+   
+       public static void main(String[] args) {
+           ThreadLocalTest t = new ThreadLocalTest();
+           Thread t1 = new Thread(t,"Thread A");
+           Thread t2 = new Thread(t,"Thread B");
+           t1.start();
+           t2.start();
+       }
+       
+   }
+   
+   class Student{
+       int age;
+       public int getAge() {
+           return age;
+       }
+       public void setAge(int age) {
+           this.age = age;
+       }
+       
+   }
+   ```
+
+### 3.14.7  CompletableFuture
+
+#### 3.14.7.1 简介
+
+这个completableFuture是JDK1.8版本新引入的类。前者是对后者的一个扩展，增加了异步回调、流式处理、多个Future组合处理的能力，使Java在处理多任务的协同工作时更加顺畅便利。
+
+#### 3.14.7.2 基本使用
+
+1. 创建异步任务
+
+   supply[Async](https://so.csdn.net/so/search?q=Async) / runAsync
+
+   supplyAsync表示创建带返回值的异步任务的，相当于ExecutorService submit(Callable<T> task) 方法，runAsync表示创建无返回值的异步任务，相当于ExecutorService submit(Runnable task)方法，这两方法的效果跟submit是一样的
+
+   ```
+       @Test
+       public void test2() throws Exception {
+           // 创建异步执行任务，有返回值
+           CompletableFuture<Double> cf = CompletableFuture.supplyAsync(()->{
+               System.out.println(Thread.currentThread()+" start,time->"+System.currentTimeMillis());
+               try {
+                   Thread.sleep(2000);
+               } catch (InterruptedException e) {
+               }
+               if(true){
+                   throw new RuntimeException("test");
+               }else{
+                   System.out.println(Thread.currentThread()+" exit,time->"+System.currentTimeMillis());
+                   return 1.2;
+               }
+           });
+           System.out.println("main thread start,time->"+System.currentTimeMillis());
+           //等待子任务执行完成
+           System.out.println("run result->"+cf.get());
+           System.out.println("main thread exit,time->"+System.currentTimeMillis());
+       }
+    
+      @Test
+       public void test4() throws Exception {
+           // 创建异步执行任务，无返回值
+           CompletableFuture cf = CompletableFuture.runAsync(()->{
+               System.out.println(Thread.currentThread()+" start,time->"+System.currentTimeMillis());
+               try {
+                   Thread.sleep(2000);
+               } catch (InterruptedException e) {
+               }
+               if(false){
+                   throw new RuntimeException("test");
+               }else{
+                   System.out.println(Thread.currentThread()+" exit,time->"+System.currentTimeMillis());
+               }
+           });
+           System.out.println("main thread start,time->"+System.currentTimeMillis());
+           //等待子任务执行完成
+           System.out.println("run result->"+cf.get());
+           System.out.println("main thread exit,time->"+System.currentTimeMillis());
+       }
+   ```
+
+   这两方法各有一个重载版本，可以指定执行异步任务的Executor实现，如果不指定，默认使用ForkJoinPool.commonPool()，如果机器是单核的，则默认使用ThreadPerTaskExecutor，该类是一个内部类，每次执行execute都会创建一个新线程。
+
+2. 异步回调
+
+   + thenApply / thenApplyAsync
+
+     thenApply 表示某个任务执行完成后执行的动作，即回调方法，会将该任务的执行结果即方法返回值作为入参传递到回调方法中
+
+     ```java
+     @Test
+         public void test5() throws Exception {
+             ForkJoinPool pool=new ForkJoinPool();
+             // 创建异步执行任务:
+             CompletableFuture<Double> cf = CompletableFuture.supplyAsync(()->{
+                 System.out.println(Thread.currentThread()+" start job1,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println(Thread.currentThread()+" exit job1,time->"+System.currentTimeMillis());
+                 return 1.2;
+             },pool);
+             //cf关联的异步任务的返回值作为方法入参，传入到thenApply的方法中
+             //thenApply这里实际创建了一个新的CompletableFuture实例
+             CompletableFuture<String> cf2=cf.thenApply((result)->{
+                 System.out.println(Thread.currentThread()+" start job2,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println(Thread.currentThread()+" exit job2,time->"+System.currentTimeMillis());
+                 return "test:"+result;
+             });
+             System.out.println("main thread start cf.get(),time->"+System.currentTimeMillis());
+             //等待子任务执行完成
+             System.out.println("run result->"+cf.get());
+             System.out.println("main thread start cf2.get(),time->"+System.currentTimeMillis());
+             System.out.println("run result->"+cf2.get());
+             System.out.println("main thread exit,time->"+System.currentTimeMillis());
+         }
+     ```
+
+     **注意:thenApplyAsync与thenApply的区别在于，前者是将job2提交到线程池中异步执行，实际执行job2的线程可能是另外一个线程，后者是由执行job1的线程立即执行job2，即两个job都是同一个线程执行的。**
+
+   + thenAccept / thenRun
+
+     thenAccept 同 thenApply 接收上一个任务的返回值作为参数，但是无返回值；thenRun 的方法没有入参，也买有返回值
+
+     ```java
+     @Test
+         public void test6() throws Exception {
+             ForkJoinPool pool=new ForkJoinPool();
+             // 创建异步执行任务:
+             CompletableFuture<Double> cf = CompletableFuture.supplyAsync(()->{
+                 System.out.println(Thread.currentThread()+" start job1,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println(Thread.currentThread()+" exit job1,time->"+System.currentTimeMillis());
+                 return 1.2;
+             },pool);
+             //cf关联的异步任务的返回值作为方法入参，传入到thenApply的方法中
+             CompletableFuture cf2=cf.thenApply((result)->{
+                 System.out.println(Thread.currentThread()+" start job2,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println(Thread.currentThread()+" exit job2,time->"+System.currentTimeMillis());
+                 return "test:"+result;
+             }).thenAccept((result)-> { //接收上一个任务的执行结果作为入参，但是没有返回值
+                 System.out.println(Thread.currentThread()+" start job3,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println(result);
+                 System.out.println(Thread.currentThread()+" exit job3,time->"+System.currentTimeMillis());
+             }).thenRun(()->{ //无入参，也没有返回值
+                 System.out.println(Thread.currentThread()+" start job4,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println("thenRun do something");
+                 System.out.println(Thread.currentThread()+" exit job4,time->"+System.currentTimeMillis());
+             });
+             System.out.println("main thread start cf.get(),time->"+System.currentTimeMillis());
+             //等待子任务执行完成
+             System.out.println("run result->"+cf.get());
+             System.out.println("main thread start cf2.get(),time->"+System.currentTimeMillis());
+             //cf2 等待最后一个thenRun执行完成
+             System.out.println("run result->"+cf2.get());
+             System.out.println("main thread exit,time->"+System.currentTimeMillis());
+         }
+     ```
+
+   + exceptionally
+
+     exceptionally方法指定某个任务执行异常时执行的回调方法，会将抛出异常作为参数传递到回调方法中，如果该任务正常执行则不会执行exceptionally方法
+
+     ```java
+     @Test
+         public void test2() throws Exception {
+             ForkJoinPool pool=new ForkJoinPool();
+             // 创建异步执行任务:
+             CompletableFuture<Double> cf = CompletableFuture.supplyAsync(()->{
+                 System.out.println(Thread.currentThread()+"job1 start,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 if(true){
+                     throw new RuntimeException("test");
+                 }else{
+                     System.out.println(Thread.currentThread()+"job1 exit,time->"+System.currentTimeMillis());
+                     return 1.2;
+                 }
+             },pool);
+             //cf执行异常时，将抛出的异常作为入参传递给回调方法
+             CompletableFuture<Double> cf2= cf.exceptionally((param)->{
+                  System.out.println(Thread.currentThread()+" start,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println("error stack trace->");
+                 param.printStackTrace();
+                 System.out.println(Thread.currentThread()+" exit,time->"+System.currentTimeMillis());
+                  return -1.1;
+             });
+             //cf正常执行时执行的逻辑，如果执行异常则不调用此逻辑
+             CompletableFuture cf3=cf.thenAccept((param)->{
+                 System.out.println(Thread.currentThread()+"job2 start,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println("param->"+param);
+                 System.out.println(Thread.currentThread()+"job2 exit,time->"+System.currentTimeMillis());
+             });
+             System.out.println("main thread start,time->"+System.currentTimeMillis());
+             //等待子任务执行完成,此处无论是job2和job3都可以实现job2退出，主线程才退出，如果是cf，则主线程不会等待job2执行完成自动退出了
+             //cf2.get时，没有异常，但是依然有返回值，就是cf的返回值
+             System.out.println("run result->"+cf2.get());
+             System.out.println("main thread exit,time->"+System.currentTimeMillis());
+         }
+     ```
+
+   + whenComplete
+
+     whenComplete是当某个任务执行完成后执行的回调方法，会将执行结果或者执行期间抛出的异常传递给回调方法，如果是正常执行则异常为null，回调方法对应的CompletableFuture的result和该任务一致,反之同理
+
+     ```java
+     @Test
+         public void test10() throws Exception {
+             // 创建异步执行任务:
+             CompletableFuture<Double> cf = CompletableFuture.supplyAsync(()->{
+                 System.out.println(Thread.currentThread()+"job1 start,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 if(false){
+                     throw new RuntimeException("test");
+                 }else{
+                     System.out.println(Thread.currentThread()+"job1 exit,time->"+System.currentTimeMillis());
+                     return 1.2;
+                 }
+             });
+             //cf执行完成后会将执行结果和执行过程中抛出的异常传入回调方法，如果是正常执行的则传入的异常为null
+             CompletableFuture<Double> cf2=cf.whenComplete((a,b)->{
+                 System.out.println(Thread.currentThread()+"job2 start,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 if(b!=null){
+                     System.out.println("error stack trace->");
+                     b.printStackTrace();
+                 }else{
+                     System.out.println("run succ,result->"+a);
+                 }
+                 System.out.println(Thread.currentThread()+"job2 exit,time->"+System.currentTimeMillis());
+             });
+             //等待子任务执行完成
+             System.out.println("main thread start wait,time->"+System.currentTimeMillis());
+             //如果cf是正常执行的，cf2.get的结果就是cf执行的结果
+             //如果cf是执行异常，则cf2.get会抛出异常
+             System.out.println("run result->"+cf2.get());
+             System.out.println("main thread exit,time->"+System.currentTimeMillis());
+         }
+     ```
+
+   + handle
+
+     跟whenComplete基本一致，区别在于handle的回调方法有返回值，且handle方法返回的CompletableFuture的result是handle的执行结果或者handle执行期间抛出的异常，与原始CompletableFuture的result无关了
+
+     ```java
+      @Test
+         public void test10() throws Exception {
+             // 创建异步执行任务:
+             CompletableFuture<Double> cf = CompletableFuture.supplyAsync(()->{
+                 System.out.println(Thread.currentThread()+"job1 start,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 if(true){
+                     throw new RuntimeException("test");
+                 }else{
+                     System.out.println(Thread.currentThread()+"job1 exit,time->"+System.currentTimeMillis());
+                     return 1.2;
+                 }
+             });
+             //cf执行完成后会将执行结果和执行过程中抛出的异常传入回调方法，如果是正常执行的则传入的异常为null
+             CompletableFuture<String> cf2=cf.handle((a,b)->{
+                 System.out.println(Thread.currentThread()+"job2 start,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 if(b!=null){
+                     System.out.println("error stack trace->");
+                     b.printStackTrace();
+                 }else{
+                     System.out.println("run succ,result->"+a);
+                 }
+                 System.out.println(Thread.currentThread()+"job2 exit,time->"+System.currentTimeMillis());
+                 if(b!=null){
+                     return "run error";
+                 }else{
+                     return "run succ";
+                 }
+             });
+             //等待子任务执行完成
+             System.out.println("main thread start wait,time->"+System.currentTimeMillis());
+             //get的结果是cf2的返回值，跟cf没关系了
+             System.out.println("run result->"+cf2.get());
+             System.out.println("main thread exit,time->"+System.currentTimeMillis());
+         }
+     ```
+
+3. 组合处理
+
+   + thenCombine / thenAcceptBoth / runAfterBoth
+
+     这三个方法都是将两个CompletableFuture组合起来，只有这两个都正常执行完了才会执行某个任务，区别在于，thenCombine会将两个任务的执行结果作为方法入参传递到指定方法中，且该方法有返回值；thenAcceptBoth同样将两个任务的执行结果作为方法入参，但是无返回值；runAfterBoth没有入参，也没有返回值。注意两个任务中只要有一个执行异常，则将该异常信息作为指定任务的执行结果。
+
+     ```java
+     @Test
+         public void test7() throws Exception {
+             ForkJoinPool pool=new ForkJoinPool();
+             // 创建异步执行任务:
+             CompletableFuture<Double> cf = CompletableFuture.supplyAsync(()->{
+                 System.out.println(Thread.currentThread()+" start job1,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println(Thread.currentThread()+" exit job1,time->"+System.currentTimeMillis());
+                 return 1.2;
+             });
+             CompletableFuture<Double> cf2 = CompletableFuture.supplyAsync(()->{
+                 System.out.println(Thread.currentThread()+" start job2,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(1500);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println(Thread.currentThread()+" exit job2,time->"+System.currentTimeMillis());
+                 return 3.2;
+             });
+             //cf和cf2的异步任务都执行完成后，会将其执行结果作为方法入参传递给cf3,且有返回值
+             CompletableFuture<Double> cf3=cf.thenCombine(cf2,(a,b)->{
+                 System.out.println(Thread.currentThread()+" start job3,time->"+System.currentTimeMillis());
+                 System.out.println("job3 param a->"+a+",b->"+b);
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println(Thread.currentThread()+" exit job3,time->"+System.currentTimeMillis());
+                 return a+b;
+             });
+      
+             //cf和cf2的异步任务都执行完成后，会将其执行结果作为方法入参传递给cf4,无返回值
+             CompletableFuture cf4=cf.thenAcceptBoth(cf2,(a,b)->{
+                 System.out.println(Thread.currentThread()+" start job4,time->"+System.currentTimeMillis());
+                 System.out.println("job4 param a->"+a+",b->"+b);
+                 try {
+                     Thread.sleep(1500);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println(Thread.currentThread()+" exit job4,time->"+System.currentTimeMillis());
+             });
+      
+             //cf4和cf3都执行完成后，执行cf5，无入参，无返回值
+             CompletableFuture cf5=cf4.runAfterBoth(cf3,()->{
+                 System.out.println(Thread.currentThread()+" start job5,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(1000);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println("cf5 do something");
+                 System.out.println(Thread.currentThread()+" exit job5,time->"+System.currentTimeMillis());
+             });
+      
+             System.out.println("main thread start cf.get(),time->"+System.currentTimeMillis());
+             //等待子任务执行完成
+             System.out.println("cf run result->"+cf.get());
+             System.out.println("main thread start cf5.get(),time->"+System.currentTimeMillis());
+             System.out.println("cf5 run result->"+cf5.get());
+             System.out.println("main thread exit,time->"+System.currentTimeMillis());
+         }
+     ```
+
+     
+
+   + applyToEither / acceptEither / runAfterEither
+
+     这三个方法都是将两个CompletableFuture组合起来，只要其中一个执行完了就会执行某个任务，其区别在于applyToEither会将已经执行完成的任务的执行结果作为方法入参，并有返回值；acceptEither同样将已经执行完成的任务的执行结果作为方法入参，但是没有返回值；runAfterEither没有方法入参，也没有返回值。注意两个任务中只要有一个执行异常，则将该异常信息作为指定任务的执行结果。
+
+     ```java
+     @Test
+         public void test8() throws Exception {
+             // 创建异步执行任务:
+             CompletableFuture<Double> cf = CompletableFuture.supplyAsync(()->{
+                 System.out.println(Thread.currentThread()+" start job1,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println(Thread.currentThread()+" exit job1,time->"+System.currentTimeMillis());
+                 return 1.2;
+             });
+             CompletableFuture<Double> cf2 = CompletableFuture.supplyAsync(()->{
+                 System.out.println(Thread.currentThread()+" start job2,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(1500);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println(Thread.currentThread()+" exit job2,time->"+System.currentTimeMillis());
+                 return 3.2;
+             });
+             //cf和cf2的异步任务都执行完成后，会将其执行结果作为方法入参传递给cf3,且有返回值
+             CompletableFuture<Double> cf3=cf.applyToEither(cf2,(result)->{
+                 System.out.println(Thread.currentThread()+" start job3,time->"+System.currentTimeMillis());
+                 System.out.println("job3 param result->"+result);
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println(Thread.currentThread()+" exit job3,time->"+System.currentTimeMillis());
+                 return result;
+             });
+      
+             //cf和cf2的异步任务都执行完成后，会将其执行结果作为方法入参传递给cf3,无返回值
+             CompletableFuture cf4=cf.acceptEither(cf2,(result)->{
+                 System.out.println(Thread.currentThread()+" start job4,time->"+System.currentTimeMillis());
+                 System.out.println("job4 param result->"+result);
+                 try {
+                     Thread.sleep(1500);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println(Thread.currentThread()+" exit job4,time->"+System.currentTimeMillis());
+             });
+      
+             //cf4和cf3都执行完成后，执行cf5，无入参，无返回值
+             CompletableFuture cf5=cf4.runAfterEither(cf3,()->{
+                 System.out.println(Thread.currentThread()+" start job5,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(1000);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println("cf5 do something");
+                 System.out.println(Thread.currentThread()+" exit job5,time->"+System.currentTimeMillis());
+             });
+      
+             System.out.println("main thread start cf.get(),time->"+System.currentTimeMillis());
+             //等待子任务执行完成
+             System.out.println("cf run result->"+cf.get());
+             System.out.println("main thread start cf5.get(),time->"+System.currentTimeMillis());
+             System.out.println("cf5 run result->"+cf5.get());
+             System.out.println("main thread exit,time->"+System.currentTimeMillis());
+         }
+     ```
+
+     
+
+   + thenCompose
+
+     thenCompose方法会在某个任务执行完成后，将该任务的执行结果作为方法入参然后执行指定的方法，该方法会返回一个新的CompletableFuture实例，如果该CompletableFuture实例的result不为null，则返回一个基于该result的新的CompletableFuture实例；如果该CompletableFuture实例为null，则返回空对象
+
+     ```java
+         @Test
+         public void test9() throws Exception {
+             // 创建异步执行任务:
+             CompletableFuture<Double> cf = CompletableFuture.supplyAsync(()->{
+                 System.out.println(Thread.currentThread()+" start job1,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println(Thread.currentThread()+" exit job1,time->"+System.currentTimeMillis());
+                 return 1.2;
+             });
+             CompletableFuture<String> cf2= cf.thenCompose((param)->{
+                 System.out.println(Thread.currentThread()+" start job2,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println(Thread.currentThread()+" exit job2,time->"+System.currentTimeMillis());
+                 return CompletableFuture.supplyAsync(()->{
+                     System.out.println(Thread.currentThread()+" start job3,time->"+System.currentTimeMillis());
+                     try {
+                         Thread.sleep(2000);
+                     } catch (InterruptedException e) {
+                     }
+                     System.out.println(Thread.currentThread()+" exit job3,time->"+System.currentTimeMillis());
+                     return "job3 test";
+                 });
+             });
+             System.out.println("main thread start cf.get(),time->"+System.currentTimeMillis());
+             //等待子任务执行完成
+             System.out.println("cf run result->"+cf.get());
+             System.out.println("main thread start cf2.get(),time->"+System.currentTimeMillis());
+             System.out.println("cf2 run result->"+cf2.get());
+             System.out.println("main thread exit,time->"+System.currentTimeMillis());
+         }
+     ```
+
+     
+
+   + allOf / anyOf
+
+     allOf返回的CompletableFuture是多个任务都执行完成后才会执行，只有有一个任务执行异常，则返回的CompletableFuture执行get方法时会抛出异常，如果都是正常执行，则get返回null
+
+     ```java
+     public static void test11() throws Exception {
+             // 创建异步执行任务:
+             CompletableFuture<Double> cf = CompletableFuture.supplyAsync(()->{
+                 System.out.println(Thread.currentThread()+" start job1,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(2000);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println(Thread.currentThread()+" exit job1,time->"+System.currentTimeMillis());
+                 return 1.2;
+             });
+             CompletableFuture<Double> cf2 = CompletableFuture.supplyAsync(()->{
+                 System.out.println(Thread.currentThread()+" start job2,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(1500);
+                 } catch (InterruptedException e) {
+                 }
+                 System.out.println(Thread.currentThread()+" exit job2,time->"+System.currentTimeMillis());
+                 return 3.2;
+             });
+             CompletableFuture<Double> cf3 = CompletableFuture.supplyAsync(()->{
+                 System.out.println(Thread.currentThread()+" start job3,time->"+System.currentTimeMillis());
+                 try {
+                     Thread.sleep(1300);
+                 } catch (InterruptedException e) {
+                 }
+     //            throw new RuntimeException("test");
+                 System.out.println(Thread.currentThread()+" exit job3,time->"+System.currentTimeMillis());
+                 return 2.2;
+             });
+             //allof等待所有任务执行完成才执行cf4，如果有一个任务异常终止，则cf4.get时会抛出异常，都是正常执行，whenComplete的a参数等于cf4.get返回都是null
+             //anyOf是只有一个任务执行完成，无论是正常执行或者执行异常，都会执行cf4，whenComplete的a参数等于cf4.get的结果都是已执行完成的任务的执行结果
+             CompletableFuture cf4=CompletableFuture.allOf(cf,cf2,cf3).whenComplete((a,b)->{
+                 if(b!=null){
+                     System.out.println("error stack trace->");
+                     b.printStackTrace();
+                 }else{
+                     System.out.println("run succ,result->"+a);
+                 }
+             });
+     
+             System.out.println("main thread start cf4.get(),time->"+System.currentTimeMillis());
+             //等待子任务执行完成
+             System.out.println("cf4 run result->"+cf4.get());
+             System.out.println("main thread exit,time->"+System.currentTimeMillis());
+         }
+     ```
+
+     
+
+
 
