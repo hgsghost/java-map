@@ -141,7 +141,7 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
 
 ### 3.12.4 BlockingQueue
 
-![](resource\BlockingQueue.png)
+![](resource/BlockingQueue.png)
 
 一个线程将会持续生产新对象并将其插入到队列之中，直到队列达到它所能容纳的临界点。也就是说，它是有限的。如果该阻塞队列到达了其临界点，负责生产的线程将会在往里边插入新对象时发生阻塞。它会一直处于阻塞之中，直到负责消费的线程从队列中拿走一个对象。 负责消费的线程将会一直从该阻塞队列中拿出对象。如果消费线程尝试去从一个空的队列中提取对象的话，这个消费线程将会处于阻塞之中，直到一个生产线程把一个对象丢进队列。
 
@@ -155,7 +155,7 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
 
    在线程既是一个队列的生产者又是这个队列的消费者的时候可以使用到 BlockingDeque。如果生产者线程需要在队列的两端都可以插入数据，消费者线程需要在队列的两端都可以移除数据，这个时候也可以使用 BlockingDeque。BlockingDeque 图解:
 
-   ![](resource\BlockingDeque.png)
+   ![](resource/BlockingDeque.png)
 
 2. BlockingQueue大家族有哪些? 
 
@@ -320,7 +320,7 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
 
 2. FutureTask类结构关系
 
-   ![](resource\FutureTask.png)
+   ![](resource/FutureTask.png)
 
 3. FutureTask的线程安全是由什么保证的
 
@@ -521,7 +521,7 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
    + `INTERRUPTING`: 任务还没开始执行或者已经执行但是还没有执行完成的时候，用户调用了cancel(true)方法取消任务并且要中断任务执行线程但是还没有中断任务执行线程之前，状态会从NEW转化为INTERRUPTING。这是一个中间状态。
    + `INTERRUPTED`:调用interrupt()中断任务执行线程之后状态会从INTERRUPTING转换到INTERRUPTED。这是一个最终态。 有一点需要注意的是，所有值大于COMPLETING的状态都表示任务已经执行完成(任务正常执行完成，任务执行异常或者任务被取消)。
 
-   ![](resource\FutureTaskState.png)
+   ![](resource/FutureTaskState.png)
 
 6. FutureTask通常会怎么用
 
@@ -667,7 +667,7 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
 
    - TERMINATED:  3 << COUNT_BITS，即高3位为011, terminated()方法已经执行完成
 
-     ![](resource\ThreadPoolExecutorState.png)
+     ![](resource/ThreadPoolExecutorState.png)
 
 #### 3.13.2.2 面试题
 
@@ -849,7 +849,7 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
 
 9. 线程池中任务是如何提交的
 
-   ![](resource\ExecutorSubmit.png)
+   ![](resource/ExecutorSubmit.png)
 
    submit任务，等待线程池execute
 
@@ -1022,7 +1022,7 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
     
     3. ScheduledThreadPoolExecutor有什么样的数据结构，核心内部类和抽象类?
     
-       ![](resource\scheduledThreadPoolExecutor.png)
+       ![](resource/scheduledThreadPoolExecutor.png)
     
        ScheduledThreadPoolExecutor 内部构造了两个内部类 `ScheduledFutureTask` 和 `DelayedWorkQueue`:
     
@@ -1164,7 +1164,7 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
 
 3. ForkJoinPool类继承关系?
 
-   ![](resource\ForkJoinPool.png)
+   ![](resource/ForkJoinPool.png)
 
    ForkJoinWorkerThreadFactory: 内部线程工厂接口，用于创建工作线程ForkJoinWorkerThread
 
@@ -1185,7 +1185,7 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
 
 4. ForkJoinTask抽象类继承关系? 
 
-   ![](resource\ForkJoinTask.png)
+   ![](resource/ForkJoinTask.png)
 
    在实际运用中，我们一般都会继承 RecursiveTask 、RecursiveAction 或 CountedCompleter 来实现我们的业务需求，而不会直接继承 ForkJoinTask 类。
 
@@ -1193,7 +1193,7 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
 
 5. 整个Fork/Join 框架的执行流程/运行机制是怎么样的?
 
-   ![](resource\ForkJoinFlow.png)
+   ![](resource/ForkJoinFlow.png)
 
    1. ForkJoinPool.submit/invoke/execute接受ForkJoinTask参数,属于外部任务,会存放在workQueues的偶数槽位
    2. ForkJoinTask中的fork方法会分割子任务存放到WorkQueues的奇数槽位
@@ -1206,7 +1206,7 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
 
    1. 分治思想就是递归
 
-   ![](resource\DivideToRule.png)
+   ![](resource/DivideToRule.png)
 
    2. 工作窃取
 
@@ -1228,7 +1228,7 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
 
       - 当自己的队列为空时，线程随机从另一个线程的队列末尾调用poll方法窃取任务。
 
-        ![](resource\WorkStealing.png)
+        ![](resource/WorkStealing.png)
 
 7. 有哪些JDK源码中使用了Fork/Join思想?
 
@@ -1471,25 +1471,25 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
 
    时序图
 
-   ![](resource\CountDownLatchTimeSeris.png)
+   ![](resource/CountDownLatchTimeSeris.png)
 
    说明: 首先main线程会调用await操作，此时main线程会被阻塞，等待被唤醒，之后t1线程执行了countDown操作，最后，t2线程执行了countDown操作，此时main线程就被唤醒了，可以继续运行。下面，进行详细分析。
 
    1. countDownLatch.await调用如下,调用之后主线程被park
 
-   ![](resource\CountDonwLatchAwait.png)
+   ![](resource/CountDonwLatchAwait.png)
 
    2. t1线程执行countDownLatch.countDown操作，主要调用的函数如下
 
-      ![](resource\CountDownLatchCountDown.png)
+      ![](resource/CountDownLatchCountDown.png)
 
    3. t2线程执行countDownLatch.countDown操作，主要调用的函数如下
 
-      ![](resource\CountDownLatchCountDown2.png)
+      ![](resource/CountDownLatchCountDown2.png)
 
    4. main线程获取cpu资源，继续运行，由于main线程是在parkAndCheckInterrupt函数中被禁止的，所以此时，继续在parkAndCheckInterrupt函数运行
 
-      ![](resource\CountDownLatchMainUnpark.png)
+      ![](resource/CountDownLatchMainUnpark.png)
 
       说明: main线程恢复，继续在parkAndCheckInterrupt函数中运行，之后又会回到最终达到的状态为AQS的state为0，并且head与tail指向同一个结点，该节点的额nextWaiter域还是指向SHARED结点。
 
@@ -1615,7 +1615,7 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
    
    ```
 
-   ![](resource\CountDownLatchAwaitDetail.png)
+   ![](resource/CountDownLatchAwaitDetail.png)
 
    countDown
 
@@ -1680,7 +1680,7 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
    
    ```
 
-   ![](resource\CountDownLatchCountDownDetail.png)
+   ![](resource/CountDownLatchCountDownDetail.png)
 
 5. CountDownLatch适用于什么场景?
 
@@ -1822,35 +1822,35 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
 
    时序图
 
-   ![](resource\CyclicBarrierDemoTimeSeries.png)
+   ![](resource/CyclicBarrierDemoTimeSeries.png)
 
    1. 主线程执行await
 
-      ![](resource\CyclicBarrierDemoMainAwait.png)
+      ![](resource/CyclicBarrierDemoMainAwait.png)
 
       说明: 由于ReentrantLock的默认采用非公平策略，所以在dowait函数中调用的是ReentrantLock.NonfairSync的lock函数，由于此时AQS的状态是0，表示还没有被任何线程占用，故main线程可以占用，之后在dowait中会调用trip.await函数，最终的结果是条件队列中存放了一个包含main线程的结点，并且被禁止运行了，同时，main线程所拥有的资源也被释放了，可以供其他线程获取。
 
    2. t1线程执行await
 
-      ![](C:\Users\index-dev\Desktop\javamap\java-map\resource\CyclicBarrierDemoT1Await.png)
+      ![](C:\Users\index-dev\Desktop\javamap\java-map\resource/CyclicBarrierDemoT1Await.png)
 
       说明: 可以看到，之后condition queue(条件队列)里面有两个节点，包含t1线程的结点插入在队列的尾部，并且t1线程也被禁止了，因为执行了park操作，此时两个线程都被禁止了
 
    3. t2线程执行await
 
-      ![](resource\CyclicBarrierDemoT2Await.png)
+      ![](resource/CyclicBarrierDemoT2Await.png)
 
       说明: 由上图可知，在t2线程执行await操作后，会直接执行command.run方法，不是重新开启一个线程，而是最后进入屏障的线程执行。同时，会将Condition queue中的所有节点都转移到Sync queue中，并且最后main线程会被unpark，可以继续运行。main线程获取cpu资源，继续运行。
 
    4. main线程获取cpu资源，继续运行
 
-      ![](resource\CyclicBarrierDemoMainRun.png)
+      ![](resource/CyclicBarrierDemoMainRun.png)
 
       其中，由于main线程是在AQS.CO的wait中被park的，所以恢复时，会继续在该方法中运行。运行过后，t1线程被unpark，它获得cpu资源可以继续运行。
 
    5. t1线程获取cpu资源，继续运行
 
-      ![](resource\CyclicBarrierDemoT1Run.png)
+      ![](resource/CyclicBarrierDemoT1Run.png)
 
       其中，由于t1线程是在AQS.CO的wait方法中被park，所以恢复时，会继续在该方法中运行。运行过后，Sync queue中保持着一个空节点。头节点与尾节点均指向它。
 
@@ -1963,7 +1963,7 @@ ConcurerntLinkedQueue一个基于链接节点的无界线程安全队列。此�
    }
    ```
 
-   ![](resource\CyclicBarrierDoAwait.png)
+   ![](resource/CyclicBarrierDoAwait.png)
 
 ### nextGeneration
 
@@ -2041,7 +2041,7 @@ private Node enq(final Node node) {
 }
 ```
 
-![](resource\CyclicBarrierNewGeneration.png)
+![](resource/CyclicBarrierNewGeneration.png)
 
 breakBarrier
 
@@ -2134,45 +2134,45 @@ private void breakBarrier() {
 
    时序图
 
-   ![](resource\SemaphoreTimeSeries.png)
+   ![](resource/SemaphoreTimeSeries.png)
 
    1. main线程执行acquire
 
-      ![](resource\SemaphoreMainAcquire.png)
+      ![](resource/SemaphoreMainAcquire.png)
 
       此时，可以看到只是AQS的state变为了5，main线程并没有被阻塞，可以继续运行
 
    2. t1线程执行acquire
 
-   ![](resource\SemaphoreT1Acquire.png)
+   ![](resource/SemaphoreT1Acquire.png)
 
    3. t2执行acquire
 
-      ![](resource\SemaphoreT2Acquire.png)
+      ![](resource/SemaphoreT2Acquire.png)
 
       此时，t2线程获取许可不会成功，之后会导致其被禁止运行，值得注意的是，AQS的state还是为2。
 
    4. t1执行semaphore.release操作
 
-      ![](resource\SemaphoreT1Release.png)
+      ![](resource/SemaphoreT1Release.png)
 
       此时，t2线程将会被unpark，并且AQS的state为5，t2获取cpu资源后可以继续运行。
 
    5. main线程执行semaphore.release操作。
 
-      ![](resource\SemaphoreMainRelease.png)
+      ![](resource/SemaphoreMainRelease.png)
 
       此时，t2线程还会被unpark，但是不会产生影响，此时，只要t2线程获得CPU资源就可以运行了。此时，AQS的state为10
 
    6. t2获取CPU资源，继续运行，此时t2需要恢复现场，回到parkAndCheckInterrupt函数中，也是在should继续运行
 
-      ![](resource\SemaphoreT2Run.png)
+      ![](resource/SemaphoreT2Run.png)
 
       此时，可以看到，Sync queue中只有一个结点，头节点与尾节点都指向该结点，在setHeadAndPropagate的函数中会设置头节点并且会unpark队列中的其他结点。
 
    7. t2线程执行semaphore.release操作。
 
-      ![](resource\SemaphoreT2Release.png)
+      ![](resource/SemaphoreT2Release.png)
 
        t2线程经过release后，此时信号量的许可又变为10个了，此时Sync queue中的结点还是没有变化。
 
@@ -2188,7 +2188,7 @@ private void breakBarrier() {
       }
       ```
 
-      ![](resource\SemaphoreAcquire.png)
+      ![](resource/SemaphoreAcquire.png)
 
       注意:在第5步中会调用addWaiter方法将当前线程放到同步队列中,在发现获取不到执行权限后自己阻塞,被唤醒后死循环执行第6-7步尝试再次获取执行权限
 
@@ -2200,7 +2200,7 @@ private void breakBarrier() {
       }
       ```
 
-      ![](resource\SemaphoreRelease.png)
+      ![](resource/SemaphoreRelease.png)
 
 4. Semaphore适合用在什么场景
 
@@ -2244,7 +2244,7 @@ private void breakBarrier() {
 
 3. Phaser的运行机制
 
-   ![](resource\ParserRun.png)
+   ![](resource/ParserRun.png)
 
    + **Registration(注册)**
 

@@ -298,7 +298,7 @@ AQS底层使用CLH队列是一种虚拟的双向队列(拟的双向队列即不�
 
 ConditionQueue不是必须的,是一个单向链表,只有当使用Condition时，才会存在此单向链表。并且可能会有多个Condition queue。
 
-![](.\resource\AQSclh.png)
+![](resource/AQSclh.png)
 
 ### 3.9.7 源码分析
 
@@ -969,7 +969,7 @@ public final void acquire(int arg) {
 }
 ```
 
-![](.\resource\AQSacquire.png)
+![](resource/AQSacquire.png)
 
 + 首先调用tryAcquire方法,此线程会试图在独占模式下获取对象状态,返回true则获取执行权限,AQS中此方法默认抛出异常,需要在子类中重写此方法
 + 如果tryAcquire失败,则调用addWaiter方法,addWaiter方法会将线程封装成一个节点放入sync queue
@@ -1202,7 +1202,7 @@ private void unparkSuccessor(Node node) {
 
 该方法会释放(unpark)当前节点的后继节点
 
-![](.\resource\AQSUnparkSuccessor.png)
+![](resource/AQSUnparkSuccessor.png)
 
 **acquireQueue的整体逻辑**
 
@@ -1269,23 +1269,23 @@ Thread[t2,5,main] running
 
 t1线程lock调用如下
 
-![](.\resource\t1ThreadCallMethod.png)
+![](resource/t1ThreadCallMethod.png)
 
 t2线程lock调用如下
 
-![](.\resource\t2ThreadMethodCall.png)
+![](resource/t2ThreadMethodCall.png)
 
 t1线程unlock如下
 
-![](.\resource\t1ThreadUnlockCallMethod.png)
+![](resource/t1ThreadUnlockCallMethod.png)
 
 t2线程在t1线程unlock后获取锁
 
-![](.\resource\t2ThreadGetlockCallMethod.png)
+![](resource/t2ThreadGetlockCallMethod.png)
 
 t2线程unlock如下
 
-![](.\resource\t2ThreadUnlockCallMethod.png)
+![](resource/t2ThreadUnlockCallMethod.png)
 
 #### 3.9.7.8  AbstractQueuedSynchronizer示例详解二
 
@@ -1412,57 +1412,57 @@ Thread[200 consume thread,5,main] after await
 consume = 200, size = 0
 ```
 
-一种可能的情况![](\resource\AQSProductConsumer.png)
+一种可能的情况![](resource/AQSProductConsumer.png)
 
 p1调用lock.lock后直接执行代码,p1执行single无效(condition中没有节点)
 
 p2调用lock.lock后阻塞
 
-![](.\resource\p2lock.png)
+![](resource/p2lock.png)
 
 类推得到c1,c2如下
 
-![](.\resource\c2lock.png)
+![](resource/c2lock.png)
 
 p1执行unlock之后
 
-![](.\resource\p1unlock.png)
+![](resource/p1unlock.png)
 
 p1执行wait方法
 
-![](.\resource\p1wait.png)
+![](resource/p1wait.png)
 
 说明: 最终到达的状态是新生成了一个结点，包含了p2线程，此结点在condition queue中；并且sync queue中p2线程被禁止了，因为在执行了LockSupport.park操作。从方法一些调用可知，在await操作中线程会释放锁资源，供其他线程获取。同时，head结点后继结点的包含的线程的许可被释放了，故其可以继续运行。由于此时，只有c1线程可以运行，故运行c1。
 
 c1线程acquireQueue中tryAcquire成功获取执行权限
 
-![](.\resource\c1run.png)
+![](resource/c1run.png)
 
 c1线程执行signal方法
 
-![](.\resource\c1signal.png)
+![](resource/c1signal.png)
 
 说明: signal方法达到的最终结果是将包含p2线程的结点从condition queue中转移到sync queue中，之后condition queue为null，之前的尾结点的状态变为SIGNAL。
 
 c1执行unlock,c2获取执行权限
 
-![](.\resource\c1PreUnlock.png)
+![](resource/c1PreUnlock.png)
 
 c2await
 
-![](.\resource\c2preAwait.png)
+![](resource/c2preAwait.png)
 
 c2 await时会唤醒后面的线程p2
 
-![](.\resource\c2await.png)
+![](resource/c2await.png)
 
 p2 signal
 
-![](resource\p2signal.png)
+![](resource/p2signal.png)
 
 p2 unlock
 
-![](resource\p2unlock.png)
+![](resource/p2unlock.png)
 
 c2继续执行 signal无效后执行unlock 结束整个流程
 
@@ -1524,7 +1524,7 @@ public class ReentrantLock implements Lock, java.io.Serializable
 
 ReentrantLock有3个内部类,并且三个内部类紧密相关
 
-![](resource\ReentrantLockInternalClass.png)
+![](resource/ReentrantLockInternalClass.png)
 
 **sync**的源码如下
 
@@ -1618,7 +1618,7 @@ abstract static class Sync extends AbstractQueuedSynchronizer {
 }　　
 ```
 
-![](resource\ReentrantLockSync.png)
+![](resource/ReentrantLockSync.png)
 
 可以看到sync中已经实现了非公平方式获取锁(也是ReentrantLock的默认方式)
 
@@ -1777,39 +1777,39 @@ Thread[t3,5,main] running
 
 以下为可能的时序之一
 
-![](resource\ReentrantLockFairExample.png)
+![](resource/ReentrantLockFairExample.png)
 
 t1线程lock.lock方法调用,获取资源后执行sleep函数
 
-![](resource\t1lock.png)
+![](resource/t1lock.png)
 
 t2线程lock.lock
 
-![](resource\t2lock.png)
+![](resource/t2lock.png)
 
 t3线程lock.lock同理
 
-![t3lock](resource\t3lock.png)
+![t3lock](resource/t3lock.png)
 
 t1线程unlock
 
-![](resource\t1unlock.png)
+![](resource/t1unlock.png)
 
 t2线程unpark开始执行
 
-![](resource\t2unpark.png)
+![](resource/t2unpark.png)
 
 t2线程unlock
 
-![](resource\t2unlock.png)
+![](resource/t2unlock.png)
 
 t3 线程unpark
 
-![](resource\t3unpark.png)
+![](resource/t3unpark.png)
 
 t3 线程unlock
 
-![](resource\t3unlock.png)
+![](resource/t3unlock.png)
 
 ### 3.10.6 ReentrantLock和synchronized对比
 
@@ -1901,7 +1901,7 @@ public class ReentrantReadWriteLock implements ReadWriteLock, java.io.Serializab
 
 **内部类**
 
-![](resource\ReentrantReadWriteLockInternalClass.png)
+![](resource/ReentrantReadWriteLockInternalClass.png)
 
 sync继承自AQS,NonfairSync和FairSync实现了Sync,ReadLock和WriteLock实现了Lock接口,并且ReadLock和WriteLock中都有Sync字段,以调用Sync的方法来实现线程操作
 
@@ -2030,7 +2030,7 @@ protected final boolean tryAcquire(int acquires) {
 
 此函数用来获取写锁,首先会获取state，判断是否为0，若为0，表示此时没有读锁线程，再判断写线程是否应该被阻塞，而在非公平策略下总是不会被阻塞，在公平策略下会进行判断(判断同步队列中是否有等待时间更长的线程，若存在，则需要被阻塞，否则，无需阻塞)，之后在设置状态state，然后返回true。若state不为0，则表示此时存在读锁或写锁线程，若写锁线程数量为0或者当前线程为独占锁线程，则返回false，表示不成功，否则，判断写锁线程的重入次数是否大于了最大值，若是，则抛出异常，否则，设置状态state，返回true，表示成功。其函数流程图如下
 
-![](resource\ReentrantReadWriteLockTryAcquire.png)
+![](resource/ReentrantReadWriteLockTryAcquire.png)
 
 **释放独占锁**
 
@@ -2058,7 +2058,7 @@ protected final boolean tryRelease(int releases) {
 
 此函数用于释放写锁资源，首先会判断该线程是否为独占线程，若不为独占线程，则抛出异常，否则，计算释放资源后的写锁的数量，若为0，表示成功释放，资源不将被占用，否则，表示资源还被占用。其函数流程图如下。
 
-![](resource\ReentrantReadWriteLockTryRelease.png)
+![](resource/ReentrantReadWriteLockTryRelease.png)
 
 **获取共享锁**
 
@@ -2124,7 +2124,7 @@ protected final int tryAcquireShared(int unused) {
 
 此函数表示读锁线程获取读锁。首先判断写锁是否为0并且当前线程不占有独占锁，直接返回；否则，判断读线程是否需要被阻塞并且读锁数量是否小于最大值并且比较设置状态成功，若当前没有读锁，则设置第一个读线程firstReader和firstReaderHoldCount；若当前线程线程为第一个读线程，则增加firstReaderHoldCount；否则，将设置当前线程对应的HoldCounter对象的值。流程图如下。
 
-![](resource\ReentrantReadWriteLockTryAcquireShare.png)
+![](resource/ReentrantReadWriteLockTryAcquireShare.png)
 
 **释放共享锁**
 
@@ -2171,7 +2171,7 @@ protected final boolean tryReleaseShared(int unused) {
 
 此函数表示读锁线程释放锁。首先判断当前线程是否为第一个读线程firstReader，若是，则判断第一个读线程占有的资源数firstReaderHoldCount是否为1，若是，则设置第一个读线程firstReader为空，否则，将第一个读线程占有的资源数firstReaderHoldCount减1；若当前线程不是第一个读线程，那么首先会获取缓存计数器(上一个读锁线程对应的计数器 )，若计数器为空或者tid不等于当前线程的tid值，则获取当前线程的计数器，如果计数器的计数count小于等于1，则移除当前线程对应的计数器，如果计数器的计数count小于等于0，则抛出异常，之后再减少计数即可。无论何种情况，都会进入无限循环，该循环可以确保成功设置状态state。其流程图如下
 
-![](resource\ReentrantReadWriteLockTryReleaseShared.png)
+![](resource/ReentrantReadWriteLockTryReleaseShared.png)
 
 **fullTryAcquireShared函数**
 
@@ -2400,32 +2400,32 @@ wt1 unlock successfully
 
 以下是一种可能的运行时序
 
-![](resource\ReentrantReadWriteLockExample.png)
+![](resource/ReentrantReadWriteLockExample.png)
 
 rt1线程 lock
 
-![](resource\rt1lock.png)
+![](resource/rt1lock.png)
 
 rt2线程lock
 
-![](resource\rt2lock.png)
+![](resource/rt2lock.png)
 
 wt1线程lock
 
-![](resource\wt1lock.png)
+![](resource/wt1lock.png)
 
 rt1线程unlock
 
-![](resource\rt1unlock.png)
+![](resource/rt1unlock.png)
 
 rt2线程unlock
 
-![](resource\rt2unlock.png)
+![](resource/rt2unlock.png)
 
 wt1线程unpark
 
-![](resource\wt1unpark.png)
+![](resource/wt1unpark.png)
 
 wt1线程unlock
 
-![](resource\wt1unlock.png)
+![](resource/wt1unlock.png)

@@ -6,9 +6,9 @@
 
 #### 1.1.1 从传输方式上分为字节流和字符流
 
-![](resource\IoByteStream.png)
+![](resource/IoByteStream.png)
 
-![](resource\IoCharStream.png)
+![](resource/IoCharStream.png)
 
 **字节流和字符流的区别**
 
@@ -28,17 +28,17 @@ Input/OutputStreamReader/Writer
 - UTF-8 编码中，中文字符占 3 个字节，英文字符占 1 个字节；
 - UTF-16be 编码中，中文字符和英文字符都占 2 个字节。
 
-![](resource\IoDecode.png)
+![](resource/IoDecode.png)
 
 #### 1.1.3 从数据操作上分
 
-![](resource\IoDataOperate.png)
+![](resource/IoDataOperate.png)
 
 ## 1.2 io的设计模式
 
 装饰者(Decorator)和具体组件(ConcreteComponent)都继承自组件(Component)，具体组件的方法实现不需要依赖于其它对象，而装饰者组合了一个组件，这样它可以装饰其它装饰者或者具体组件。所谓装饰，就是把这个装饰者套在被装饰者之上，从而动态扩展被装饰者的功能。装饰者的方法有一部分是自己的，这属于它的功能，然后调用被装饰者的方法实现，从而也保留了被装饰者的功能。可以看到，具体组件应当是装饰层次的最低层，因为只有具体组件的方法实现不需要依赖于其它对象。
 
-![](resource\ioDecorate.png)
+![](resource/ioDecorate.png)
 
 以 InputStream 为例，
 
@@ -46,7 +46,7 @@ Input/OutputStreamReader/Writer
 - FileInputStream 是 InputStream 的子类，属于具体组件，提供了字节流的输入操作；
 - FilterInputStream 属于抽象装饰者，装饰者用于装饰组件，为组件提供额外的功能。例如 BufferedInputStream 为 FileInputStream 提供缓存的功能。
 
-![](resource\IoDecoratorInputStream.png)
+![](resource/IoDecoratorInputStream.png)
 
 ```java
 //实例化一个具有缓存功能的字节流对象时，只需要在 FileInputStream 对象上再套一层 BufferedInputStream 对象即可。
@@ -181,9 +181,9 @@ Unix 下有五种 I/O 模型:
 
    应该注意到，在阻塞的过程中，其它程序还可以执行，因此阻塞不意味着整个操作系统都被阻塞。因为其他程序还可以执行，因此不消耗 CPU 时间，这种模型的执行效率会比较高。
 
-   ![](resource\Uninxbio.png)
+   ![](resource/Uninxbio.png)
 
-   ![](resource\unixbiocn.png)
+   ![](resource/unixbiocn.png)
 
    
 
@@ -193,9 +193,9 @@ Unix 下有五种 I/O 模型:
 
    由于 CPU 要处理更多的系统调用，因此这种模型是比较低效的。
 
-   ![](resource\unixnio.png)
+   ![](resource/unixnio.png)
 
-   ![](resource\unixniocn.png)
+   ![](resource/unixniocn.png)
 
 3. I/O 复用(select 和 poll)
 
@@ -205,9 +205,9 @@ Unix 下有五种 I/O 模型:
 
    如果一个 Web 服务器没有 I/O 复用，那么每一个 Socket 连接都需要创建一个线程去处理。如果同时有几万个连接，那么就需要创建相同数量的线程。并且相比于多进程和多线程技术，I/O 复用不需要进程线程创建和切换的开销，系统开销更小。
 
-   ![](resource\unixEventDrivenIo.png)
+   ![](resource/unixEventDrivenIo.png)
 
-   ![](resource\unixEventDrivenIoCN.JPG)
+   ![](resource/unixEventDrivenIoCN.JPG)
 
    
 
@@ -217,9 +217,9 @@ Unix 下有五种 I/O 模型:
 
    相比于非阻塞式 I/O 的轮询方式，信号驱动 I/O 的 CPU 利用率更高。
 
-   ![](resource\unixSigactionIO.png)
+   ![](resource/unixSigactionIO.png)
 
-   ![](resource\unixSigactionIOCN.png)
+   ![](resource/unixSigactionIOCN.png)
 
    
 
@@ -229,11 +229,11 @@ Unix 下有五种 I/O 模型:
 
    异步 I/O 与信号驱动 I/O 的区别在于，异步 I/O 的信号是通知应用进程 I/O 完成，而信号驱动 I/O 的信号是通知应用进程可以开始 I/O。
 
-   ![](resource\unixAsynIo.png)
+   ![](resource/unixAsynIo.png)
 
    
 
-![](resource\unixAsynIoCn.png)
+![](resource/unixAsynIoCn.png)
 
 **io模型比较**
 
@@ -242,7 +242,7 @@ Unix 下有五种 I/O 模型:
 
 阻塞式 I/O、非阻塞式 I/O、I/O 复用和信号驱动 I/O 都是同步 I/O，虽然非阻塞式 I/O 和信号驱动 I/O 在等待数据阶段不会阻塞，但是在之后的将数据从内核复制到应用进程这个操作会阻塞。
 
-![](resource\unixIoCompare.png)
+![](resource/unixIoCompare.png)
 
 **注 IO多路复用是重点**
 
@@ -267,7 +267,7 @@ BIO就是: blocking IO。最容易理解、最容易实现的IO工作方式，�
 - 客户端向服务器端发出请求后，客户端会一直等待(不会再做其他事情)，直到服务器端返回结果或者网络出现问题。
 - 服务器端同样的，当在处理某个客户端A发来的请求时，另一个客户端B发来的请求会等待，直到服务器端的这个处理线程完成上一个处理。
 
-![](resource\BioTraditional.png)
+![](resource/BioTraditional.png)
 
 问题:
 
@@ -282,7 +282,7 @@ BIO就是: blocking IO。最容易理解、最容易实现的IO工作方式，�
 - 当服务器收到客户端X的请求后，(读取到所有请求数据后)将这个请求送入一个独立线程进行处理，然后主线程继续接受客户端Y的请求。
 - 客户端一侧，也可以使用一个子线程和服务器端进行通信。这样客户端主线程的其他工作就不受影响了，当服务器端有响应信息的时候再由这个子线程通过 监听模式/观察模式(等其他设计模式)通知主线程。
 
-![](resource\BioTraditionalMulityThread.png)
+![](resource/BioTraditionalMulityThread.png)
 
 局限性:
 
@@ -367,23 +367,23 @@ Standard IO是对字节流的读写，在进行IO之前，首先创建一个流�
 
      ① 新建一个大小为 8 个字节的缓冲区，此时 position 为 0，而 limit = capacity = 8。capacity 变量不会改变，下面的讨论会忽略它。
 
-     ![](resource\NioCacheStatus1.png)
+     ![](resource/NioCacheStatus1.png)
 
      ② 从输入通道中读取 5 个字节数据写入缓冲区中，此时 position 移动设置为 5，limit 保持不变
 
-     ![](resource\NioCacheStatus2.png)
+     ![](resource/NioCacheStatus2.png)
 
      ③ 在将缓冲区的数据写到输出通道之前，需要先调用 flip() 方法，这个方法将 limit 设置为当前 position，并将 position 设置为 0。
 
-     ![](resource\NioCacheStatus3.png)
+     ![](resource/NioCacheStatus3.png)
 
      ④ 从缓冲区中取 4 个字节到输出缓冲中，此时 position 设为 4。
 
-     ![](resource\NioCacheStatus4.png)
+     ![](resource/NioCacheStatus4.png)
 
      ⑤ 最后需要调用 clear() 方法来清空缓冲区，此时 position 和 limit 都被设置为最初位置。
 
-     ![](resource\NioCacheStatus5.png)
+     ![](resource/NioCacheStatus5.png)
 
      **NIO复制文件示例**
 
@@ -441,7 +441,7 @@ Standard IO是对字节流的读写，在进行IO之前，首先创建一个流�
 
   应该注意的是，只有套接字 Channel 才能配置为非阻塞，而 FileChannel 不能，为 FileChannel 配置非阻塞也没有意义。
 
-  ![](resource\NioSelector.png)
+  ![](resource/NioSelector.png)
 
   ```java
   //创建选择器
@@ -601,6 +601,21 @@ Standard IO是对字节流的读写，在进行IO之前，首先创建一个流�
 
 ## 1.7  NIO-IO多路复用详解
 
+**服务端io线程模型**
+
+![](resource/NioServerThreadStructure.jpeg)
+
+**2种fd**(注释:file descriptor 文件描述符号，类似文件句柄)
+
+1. listenfd：一般情况，只有一个。用来监听一个特定的端口(如80)。
+2. connfd：每个连接都有一个connfd。用来收发数据。
+
+**3种事件**
+
+1. listenfd进行accept阻塞监听，创建一个connfd
+2. 用户态/内核态copy数据。每个connfd对应着2个应用缓冲区：readbuf和writebuf。
+3. 处理connfd发来的数据。业务逻辑处理，准备response到writebuf。
+
 ### 1.7.1 多路复用实现类型
 
 目前流程的多路复用IO实现主要包括四种: `select`、`poll`、`epoll`、`kqueue`。下表是他们的一些重要特性的比较:
@@ -618,7 +633,7 @@ Standard IO是对字节流的读写，在进行IO之前，首先创建一个流�
 
 对于传统IO模型，其主要是一个Server对接N个客户端，在客户端连接之后，为每个客户端都分配一个执行线程。
 
-![](resource\IOMuiltyBioTraditional.jpg)
+![](resource/IOMuiltyBioTraditional.jpg)
 
 从图中可以看出，传统IO的特点在于：
 
@@ -635,7 +650,7 @@ Standard IO是对字节流的读写，在进行IO之前，首先创建一个流�
 
 在传统IO模型中，由于线程在等待连接以及进行IO操作时都会阻塞当前线程，这部分损耗是非常大的。因而jdk 1.4中就提供了一套非阻塞IO的API。该API本质上是以事件驱动来处理网络事件的，而Reactor是基于该API提出的一套IO模型。如下是Reactor事件驱动模型的示意图：
 
-![](resource\IONioReactor.jpg)
+![](resource/IONioReactor.jpg)
 
 从图中可以看出，在Reactor模型中，主要有四个角色：客户端连接，Reactor，Acceptor和Handler。这里Acceptor会不断地接收客户端的连接，然后将接收到的连接交由Reactor进行分发，最后有具体的Handler进行处理。改进后的Reactor模型相对于传统的IO模型主要有如下优点：
 
@@ -653,7 +668,7 @@ Standard IO是对字节流的读写，在进行IO之前，首先创建一个流�
 
 基于上述两个问题，这里在单线程Reactor模型的基础上提出了使用线程池的方式处理业务操作的模型。
 
-![](resource\IONioReactorExecutors.jpg)
+![](resource/IONioReactorExecutors.jpg)
 
 从图中可以看出，在多线程进行业务操作的模型下，该模式主要具有如下特点：
 
@@ -668,7 +683,7 @@ Standard IO是对字节流的读写，在进行IO之前，首先创建一个流�
 
 对于使用线程池处理业务操作的模型，由于网络读写在高并发情况下会成为系统的一个瓶颈，因而针对该模型这里提出了一种改进后的模型，即使用线程池进行网络读写，而仅仅只使用一个线程专门接收客户端连接。如下是该模型的示意图：
 
-![](resource\IONioMuiltyReactor.jpg)
+![](resource/IONioMuiltyReactor.jpg)
 
 
 
@@ -827,17 +842,17 @@ public class Handler implements Runnable {
 
 ```
 
-![](resource\IoNioReactorExample.jpg)
+![](resource/IoNioReactorExample.jpg)
 
 ### 1.7.7 java对多路复用IO的支持
 
-![](resource\IONioJava.png)
+![](resource/IONioJava.png)
 
 ### 1.7.8 重要概念Channel
 
 通道，被建立的一个应用程序和操作系统交互事件、传递内容的渠道(注意是连接到操作系统)。一个通道会有一个专属的文件状态描述符。那么既然是和操作系统进行内容的传递，那么说明应用程序可以通过通道读取数据，也可以通过通道向操作系统写数据。
 
-![](resource\ReactorChannel.png)
+![](resource/ReactorChannel.png)
 
 所有被Selector(选择器)注册的通道，只能是继承了SelectableChannel类的子类。如上图所示
 
@@ -853,7 +868,7 @@ public class Handler implements Runnable {
 
 Buffer有两种工作模式: 写模式和读模式。在读模式下，应用程序只能从Buffer中读取数据，不能进行写操作。但是在写模式下，应用程序是可以进行读操作的，这就表示可能会出现脏读的情况。所以一旦您决定要从Buffer中读取数据，一定要将Buffer的状态改为读模式。
 
-![](resource\ReactorBuffer.png)
+![](resource/ReactorBuffer.png)
 
 + position: 缓存区目前这在操作的数据块位置
 
@@ -891,7 +906,7 @@ private SelectionKeyImpl[] channelArray = new SelectionKeyImpl[INIT_CAP];
 
 之前已经提到过，多路复用IO技术 是需要操作系统进行支持的，其特点就是操作系统可以同时扫描同一个端口上不同网络连接的事件。所以作为上层的JVM，必须要为 不同操作系统的多路复用IO实现 编写不同的代码。同样我使用的测试环境是Windows，它对应的实现类是
 
-![](resource\ReactorWindowsSelectorImpl.png)
+![](resource/ReactorWindowsSelectorImpl.png)
 
 ### 1.7.10 JAVA NIO 框架简要设计分析
 
@@ -904,7 +919,7 @@ private SelectionKeyImpl[] channelArray = new SelectionKeyImpl[INIT_CAP];
 
 由于JAVA NIO框架的整个设计是很大的，所以我们只能还原一部分我们关心的问题。这里我们以JAVA NIO框架中对于不同多路复用IO技术的选择器 进行实例化创建的方式作为例子，以点窥豹观全局:
 
-![](resource\NIOJavaStructure.png)
+![](resource/NIOJavaStructure.png)
 
 很明显，不同的SelectorProvider实现对应了不同的 选择器。由具体的SelectorProvider实现进行创建。另外说明一下，实际上netty底层也是通过这个设计获得具体使用的NIO模型，我们后文讲解Netty时，会讲到这个问题。
 
@@ -1087,7 +1102,7 @@ public class SocketServer1 {
 
 - serverChannel.register(Selector sel, int ops, Object att): 实际上register(Selector sel, int ops, Object att)方法是ServerSocketChannel类的父类AbstractSelectableChannel提供的一个方法，表示只要继承了AbstractSelectableChannel类的子类都可以注册到选择器中。通过观察整个AbstractSelectableChannel继承关系，下图中的这些类可以被注册到选择器中:
 
-  ![](resource\NIOjavaExample.png)
+  ![](resource/NIOjavaExample.png)
 
 - SelectionKey.OP_ACCEPT: 不同的Channel对象可以注册的“我关心的事件”是不一样的。例如ServerSocketChannel除了能够被允许关注OP_ACCEPT事件外，不允许再关心其他事件了(否则运行时会抛出异常)。以下梳理了常使用的AbstractSelectableChannel子类可以注册的事件列表:
 
@@ -1314,3 +1329,262 @@ public class SocketServer2 {
 2. 同一个端口可以处理多种协议，例如，使用ServerSocketChannel监测的服务器端口监听，既可以处理TCP协议又可以处理UDP协议。
 3. 操作系统级别的优化: 多路复用IO技术可以是操作系统级别在一个端口上能够同时接受多个客户端的IO事件。同时具有之前我们讲到的阻塞式同步IO和非阻塞式同步IO的所有特点。Selector的一部分作用更相当于“轮询代理器”。
 4. 都是同步IO: 目前我们介绍的 阻塞式IO、非阻塞式IO甚至包括多路复用IO，这些都是基于操作系统级别对“同步IO”的实现。我们一直在说“同步IO”，一直都没有详细说，什么叫做“同步IO”。实际上一句话就可以说清楚: 只有上层(包括上层的某种代理机制)系统询问我是否有某个事件发生了，否则我不会主动告诉上层系统事件发生了
+
+## 1.8 异步IO详解
+
+上面两篇文章中，我们分别讲解了阻塞式同步IO、非阻塞式同步IO、多路复用IO 这三种IO模型，以及JAVA对于这三种IO模型的支持。重点说明了IO模型是由操作系统提供支持，且这三种IO模型都是同步IO，都是采用的“应用程序不询问我，我绝不会主动通知”的方式。
+
+异步IO采用“订阅-通知”模式: 即应用程序向操作系统注册IO监听，然后继续做自己的事情。当操作系统发生IO事件，并且准备好数据后，在主动通知应用程序，触发相应的函数:
+
+![](resource/AIOStructure.png)
+
+和同步IO一样，异步IO也是由操作系统进行支持的。微软的windows系统提供了一种异步IO技术: IOCP(I/O Completion Port，I/O完成端口)；
+
+Linux下由于没有这种异步IO技术，所以使用的是epoll(上文介绍过的一种多路复用IO技术的实现)对异步IO进行模拟。
+
+![](resource/AIOJavaStructure.png)
+
+这里通过这个结构分析要告诉各位读者JAVA AIO中类设计和操作系统的相关性
+
+在文中我们一再说明JAVA AIO框架在windows下使用windows IOCP技术，在Linux下使用epoll多路复用IO技术模拟异步IO，这个从JAVA AIO框架的部分类设计上就可以看出来。例如框架中，在Windows下负责实现套接字通道的具体类是“sun.nio.ch.WindowsAsynchronousSocketChannelImpl”，其引用的IOCP类型文档注释如是:
+
+```java
+/** 
+* Windows implementation of AsynchronousChannelGroup encapsulating an I/O 
+* completion port. 
+*/
+```
+
+**AIO实例**
+
+```java
+package testASocket;
+
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.AsynchronousChannelGroup;
+import java.nio.channels.AsynchronousServerSocketChannel;
+import java.nio.channels.AsynchronousSocketChannel;
+import java.nio.channels.CompletionHandler;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.log4j.BasicConfigurator;
+
+/**
+ * @author yinwenjie
+ */
+public class SocketServer {
+
+    static {
+        BasicConfigurator.configure();
+    }
+
+    private static final Object waitObject = new Object();
+
+    /**
+     * @param args
+     * @throws Exception
+     */
+    public static void main(String[] args) throws Exception {
+        /*
+         * 对于使用的线程池技术，我一定要多说几句
+         * 1、Executors是线程池生成工具，通过这个工具我们可以很轻松的生成“固定大小的线程池”、“调度池”、“可伸缩线程数量的池”。具体请看API Doc
+         * 2、当然您也可以通过ThreadPoolExecutor直接生成池。
+         * 3、这个线程池是用来得到操作系统的“IO事件通知”的，不是用来进行“得到IO数据后的业务处理的”。要进行后者的操作，您可以再使用一个池(最好不要混用)
+         * 4、您也可以不使用线程池(不推荐)，如果决定不使用线程池，直接AsynchronousServerSocketChannel.open()就行了。
+         * */
+        ExecutorService threadPool = Executors.newFixedThreadPool(20);
+        AsynchronousChannelGroup group = AsynchronousChannelGroup.withThreadPool(threadPool);
+        final AsynchronousServerSocketChannel serverSocket = AsynchronousServerSocketChannel.open(group);
+
+        //设置要监听的端口“0.0.0.0”代表本机所有IP设备
+        serverSocket.bind(new InetSocketAddress("0.0.0.0", 83));
+        //为AsynchronousServerSocketChannel注册监听，注意只是为AsynchronousServerSocketChannel通道注册监听
+        //并不包括为 随后客户端和服务器 socketchannel通道注册的监听
+        serverSocket.accept(null, new ServerSocketChannelHandle(serverSocket));
+
+        //等待，以便观察现象(这个和要讲解的原理本身没有任何关系，只是为了保证守护线程不会退出)
+        synchronized(waitObject) {
+            waitObject.wait();
+        }
+    }
+}
+
+/**
+ * 这个处理器类，专门用来响应 ServerSocketChannel 的事件。
+ * @author yinwenjie
+ */
+class ServerSocketChannelHandle implements CompletionHandler<AsynchronousSocketChannel, Void> {
+    /**
+     * 日志
+     */
+    private static final Log LOGGER = LogFactory.getLog(ServerSocketChannelHandle.class);
+
+    private AsynchronousServerSocketChannel serverSocketChannel;
+
+    /**
+     * @param serverSocketChannel
+     */
+    public ServerSocketChannelHandle(AsynchronousServerSocketChannel serverSocketChannel) {
+        this.serverSocketChannel = serverSocketChannel;
+    }
+
+    /**
+     * 注意，我们分别观察 this、socketChannel、attachment三个对象的id。
+     * 来观察不同客户端连接到达时，这三个对象的变化，以说明ServerSocketChannelHandle的监听模式
+     */
+    @Override
+    public void completed(AsynchronousSocketChannel socketChannel, Void attachment) {
+        ServerSocketChannelHandle.LOGGER.info("completed(AsynchronousSocketChannel result, ByteBuffer attachment)");
+        //每次都要重新注册监听(一次注册，一次响应)，但是由于“文件状态标示符”是独享的，所以不需要担心有“漏掉的”事件
+        this.serverSocketChannel.accept(attachment, this);
+
+        //为这个新的socketChannel注册“read”事件，以便操作系统在收到数据并准备好后，主动通知应用程序
+        //在这里，由于我们要将这个客户端多次传输的数据累加起来一起处理，所以我们将一个stringbuffer对象作为一个“附件”依附在这个channel上
+        //
+        ByteBuffer readBuffer = ByteBuffer.allocate(50);
+        socketChannel.read(readBuffer, new StringBuffer(), new SocketChannelReadHandle(socketChannel , readBuffer));
+    }
+
+    /* (non-Javadoc)
+     * @see java.nio.channels.CompletionHandler#failed(java.lang.Throwable, java.lang.Object)
+     */
+    @Override
+    public void failed(Throwable exc, Void attachment) {
+        ServerSocketChannelHandle.LOGGER.info("failed(Throwable exc, ByteBuffer attachment)");
+    }
+}
+
+/**
+ * 负责对每一个socketChannel的数据获取事件进行监听。<p>
+ * 
+ * 重要的说明: 一个socketchannel都会有一个独立工作的SocketChannelReadHandle对象(CompletionHandler接口的实现)，
+ * 其中又都将独享一个“文件状态标示”对象FileDescriptor、
+ * 一个独立的由程序员定义的Buffer缓存(这里我们使用的是ByteBuffer)、
+ * 所以不用担心在服务器端会出现“窜对象”这种情况，因为JAVA AIO框架已经帮您组织好了。<p>
+ * 
+ * 但是最重要的，用于生成channel的对象: AsynchronousChannelProvider是单例模式，无论在哪组socketchannel，
+ * 对是一个对象引用(但这没关系，因为您不会直接操作这个AsynchronousChannelProvider对象)。
+ * @author yinwenjie
+ */
+class SocketChannelReadHandle implements CompletionHandler<Integer, StringBuffer> {
+    /**
+     * 日志
+     */
+    private static final Log LOGGER = LogFactory.getLog(SocketChannelReadHandle.class);
+
+    private AsynchronousSocketChannel socketChannel;
+
+    /**
+     * 专门用于进行这个通道数据缓存操作的ByteBuffer<br>
+     * 当然，您也可以作为CompletionHandler的attachment形式传入。<br>
+     * 这是，在这段示例代码中，attachment被我们用来记录所有传送过来的Stringbuffer了。
+     */
+    private ByteBuffer byteBuffer;
+
+    public SocketChannelReadHandle(AsynchronousSocketChannel socketChannel , ByteBuffer byteBuffer) {
+        this.socketChannel = socketChannel;
+        this.byteBuffer = byteBuffer;
+    }
+
+    /* (non-Javadoc)
+     * @see java.nio.channels.CompletionHandler#completed(java.lang.Object, java.lang.Object)
+     */
+    @Override
+    public void completed(Integer result, StringBuffer historyContext) {
+        //如果条件成立，说明客户端主动终止了TCP套接字，这时服务端终止就可以了
+        if(result == -1) {
+            try {
+                this.socketChannel.close();
+            } catch (IOException e) {
+                SocketChannelReadHandle.LOGGER.error(e);
+            }
+            return;
+        }
+
+        SocketChannelReadHandle.LOGGER.info("completed(Integer result, Void attachment) : 然后我们来取出通道中准备好的值");
+        /*
+         * 实际上，由于我们从Integer result知道了本次channel从操作系统获取数据总长度
+         * 所以实际上，我们不需要切换成“读模式”的，但是为了保证编码的规范性，还是建议进行切换。
+         * 
+         * 另外，无论是JAVA AIO框架还是JAVA NIO框架，都会出现“buffer的总容量”小于“当前从操作系统获取到的总数据量”，
+         * 但区别是，JAVA AIO框架中，我们不需要专门考虑处理这样的情况，因为JAVA AIO框架已经帮我们做了处理(做成了多次通知)
+         * */
+        this.byteBuffer.flip();
+        byte[] contexts = new byte[1024];
+        this.byteBuffer.get(contexts, 0, result);
+        this.byteBuffer.clear();
+        try {
+            String nowContent = new String(contexts , 0 , result , "UTF-8");
+            historyContext.append(nowContent);
+            SocketChannelReadHandle.LOGGER.info("================目前的传输结果: " + historyContext);
+        } catch (UnsupportedEncodingException e) {
+            SocketChannelReadHandle.LOGGER.error(e);
+        }
+
+        //如果条件成立，说明还没有接收到“结束标记”
+        if(historyContext.indexOf("over") == -1) {
+            return;
+        }
+
+        //=========================================================================
+        //          和上篇文章的代码相同，我们以“over”符号作为客户端完整信息的标记
+        //=========================================================================
+        SocketChannelReadHandle.LOGGER.info("=======收到完整信息，开始处理业务=========");
+        historyContext = new StringBuffer();
+
+        //还要继续监听(一次监听一次通知)
+        this.socketChannel.read(this.byteBuffer, historyContext, this);
+    }
+
+    /* (non-Javadoc)
+     * @see java.nio.channels.CompletionHandler#failed(java.lang.Throwable, java.lang.Object)
+     */
+    @Override
+    public void failed(Throwable exc, StringBuffer historyContext) {
+        SocketChannelReadHandle.LOGGER.info("=====发现客户端异常关闭，服务器将关闭TCP通道");
+        try {
+            this.socketChannel.close();
+        } catch (IOException e) {
+            SocketChannelReadHandle.LOGGER.error(e);
+        }
+    }
+}
+```
+
+要点:
+
+JAVA NIO框架中，我们说到了一个重要概念“selector”(选择器)。它负责代替应用查询中所有已注册的通道到操作系统中进行IO事件轮询、管理当前注册的通道集合，定位发生事件的通道等操操作；但是在JAVA AIO框架中，由于应用程序不是“轮询”方式，而是订阅-通知方式，所以不再需要“selector”(选择器)了，改由channel通道直接到操作系统注册监听。
+
+JAVA AIO框架中，只实现了两种网络IO通道“AsynchronousServerSocketChannel”(服务器监听通道)、“AsynchronousSocketChannel”(socket套接字通道)。但是无论哪种通道他们都有独立的fileDescriptor(文件标识符)、attachment(附件，附件可以使任意对象，类似“通道上下文”)，并被独立的SocketChannelReadHandle类实例引用。
+
+**服务器端处理每一个客户端通道所使用的SocketChannelReadHandle(处理器)对象都是独立的，并且所引用的SocketChannel对象都是独立的。**
+
+JAVA NIO和JAVA AIO框架，除了因为操作系统的实现不一样而去掉了Selector外，其他的重要概念都是存在的，例如上文中提到的Channel的概念，还有演示代码中使用的Buffer缓存方式。实际上JAVA NIO和JAVA AIO框架您可以看成是一套完整的“高并发IO处理”的实现。
+
+**改进**
+
+当然，以上代码是示例代码，目标是为了让您了解JAVA AIO框架的基本使用。所以它还有很多改造的空间，例如:
+
+在生产环境下，我们需要记录这个通道上“用户的登录信息”。那么这个需求可以使用JAVA AIO中的“附件”功能进行实现。
+
+记住JAVA AIO 和 JAVA NIO 框架都是要使用线程池的(当然您也可以不用)，线程池的使用原则，一定是只有业务处理部分才使用，使用后马上结束线程的执行(还回线程池或者消灭它)。JAVA AIO框架中还有一个线程池，是拿给“通知处理器”使用的，这是因为JAVA AIO框架是基于“订阅-通知”模型的，“订阅”操作可以由主线程完成，但是您总不能要求在应用程序中并发的“通知”操作也在主线程上完成吧^_^。
+
+最好的改进方式，当然就是使用Netty或者Mina咯。
+
+**Netty的好处**
+
+那么有的读者可能就会问，既然JAVA NIO / JAVA AIO已经实现了各主流操作系统的底层支持，那么为什么现在主流的JAVA NIO技术会是Netty和MINA呢? 答案很简单: 因为更好用，这里举几个方面的例子:
+
++ 虽然JAVA NIO 和 JAVA AIO框架提供了 多路复用IO/异步IO的支持，但是并没有提供上层“信息格式”的良好封装。例如前两者并没有提供针对 Protocol Buffer、JSON这些信息格式的封装，但是Netty框架提供了这些数据格式封装(基于责任链模式的编码和解码功能)
+
++ 要编写一个可靠的、易维护的、高性能的(注意它们的排序)NIO/AIO 服务器应用。除了框架本身要兼容实现各类操作系统的实现外。更重要的是它应该还要处理很多上层特有服务，例如: 客户端的权限、还有上面提到的信息格式封装、简单的数据读取。这些Netty框架都提供了响应的支持。
+
+
+
++ JAVA NIO框架存在一个poll/epoll bug: Selector doesn’t block on Selector.select(timeout)，不能block意味着CPU的使用率会变成100%(这是底层JNI的问题，上层要处理这个异常实际上也好办)。当然这个bug只有在Linux内核上才能重现。这个问题在JDK 1.7版本中还没有被完全解决: http://bugs.java.com/bugdatabase/view_bug.do?bug_id=2147719。虽然Netty 4.0中也是基于JAVA NIO框架进行封装的(上文中已经给出了Netty中NioServerSocketChannel类的介绍)，但是Netty已经将这个bug进行了处理。

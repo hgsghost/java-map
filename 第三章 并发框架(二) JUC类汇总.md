@@ -2,11 +2,11 @@
 
 ##  3.6 JUC类汇总指南
 
-![](.\resource\JUCStructure.png)
+![](resource/JUCStructure.png)
 
 ### 3.6.1 locks和tools
 
-![](.\resource\LockAndTools.png)
+![](resource/LockAndTools.png)
 
 #### 3.6.1.1 Condition
 
@@ -70,7 +70,7 @@ Exchanger是用于线程协作的工具类, 主要用于两个线程之间的数
 
 ### 3.6.2 并发集合
 
-![](.\resource\ConcurrentCollections.png)
+![](resource/ConcurrentCollections.png)
 
 #### 3.6.2.1 ArrayBlockingQueue
 
@@ -150,7 +150,7 @@ ArrayList 的一个线程安全的变体，其中所有可变操作(add、set �
 
 ### 3.6.4 Executors: 线程池
 
-![](.\resource\JUCExexutors.png)
+![](resource/JUCExexutors.png)
 
 #### 3.6.4.1 Executor
 
