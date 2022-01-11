@@ -1755,3 +1755,93 @@ DMA(Direct Memory Access，直接内存存取) 是所有现代电脑的重要特
 
 若能稍作深入了解，便能识透其真相，究竟只是`偏向于优化数据操作`，还是真正切合场景、灵活运用了操作系统意义上的零拷贝，都会浮出水面了。
 
+### 1.9.6 Java零拷贝机制解析
+
+Linux提供的领拷贝技术 Java并不是全支持，支持2种(内存映射mmap、sendfile)；
+
+**NIO提供的内存映射 MappedByteBuffer**
+
+- 首先要说明的是，JavaNlO中 的Channel (通道)就相当于操作系统中的内核缓冲区，有可能是读缓冲区，也有可能是网络缓冲区，而Buffer就相当于操作系统中的用户缓冲区。
+
+```java
+MappedByteBuffer mappedByteBuffer = new RandomAccessFile(file, "r") 
+                                 .getChannel() 
+                                .map(FileChannel.MapMode.READ_ONLY, 0, len);
+```
+
+底层就是调用Linux mmap()实现的。
+
+NIO中的FileChannel.map()方法其实就是采用了操作系统中的内存映射方式，底层就是调用Linux mmap()实现的。
+
+将内核缓冲区的内存和用户缓冲区的内存做了一个地址映射。这种方式适合读取大文件，同时也能对文件内容进行更改，但是如果其后要通过SocketChannel发送，还是需要CPU进行数据的拷贝。
+ 使用MappedByteBuffer，小文件，效率不高；一个进程访问，效率也不高。
+
+MappedByteBuffer只能通过调用FileChannel的map()取得，再没有其他方式。
+ FileChannel.map()是抽象方法，具体实现是在 FileChannelImpl.c 可自行查看JDK源码，其map0()方法就是调用了Linux内核的mmap的API。
+ 使用 MappedByteBuffer类要注意的是：mmap的文件映射，在full gc时才会进行释放。当close时，需要手动清除内存映射文件，可以反射调用sun.misc.Cleaner方法。
+
+**NIO提供的sendfile**
+
+FileChannel.transferTo()方法直接将当前通道内容传输到另一个通道，没有涉及到Buffer的任何操作，NIO中 的Buffer是JVM堆或者堆外内存，但不论如何他们都是操作系统内核空间的内存
+
+transferTo()的实现方式就是通过系统调用sendfile() (当然这是Linux中的系统调用)
+
+```java
+//使用sendfile:读取磁盘文件，并网络发送
+FileChannel sourceChannel = new RandomAccessFile(source, "rw").getChannel();
+SocketChannel socketChannel = SocketChannel.open(sa);
+sourceChannel.transferTo(0, sourceChannel.size(), socketChannel);
+```
+
+**ZeroCopyFile实现文件复制**
+
+```cpp
+class ZeroCopyFile {
+
+    public void copyFile(File src, File dest) {
+        try (FileChannel srcChannel = new FileInputStream(src).getChannel();
+             FileChannel destChannel = new FileInputStream(dest).getChannel()) {
+
+            srcChannel.transferTo(0, srcChannel.size(), destChannel);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+注意： Java NIO提供的FileChannel.transferTo 和 transferFrom 并不保证一定能使用零拷贝。实际上是否能使用零拷贝与操作系统相关，如果操作系统提供 sendfile 这样的零拷贝系统调用，则这两个方法会通过这样的系统调用充分利用零拷贝的优势，否则并不能通过这两个方法本身实现零拷贝。
+
+### 1.9.7 Kafka中的零拷贝
+
+Kafka两个重要过程都使用了零拷贝技术，且都是操作系统层面的狭义零拷贝，一是Producer生产的数据存到broker，二是 Consumer从broker读取数据。
+
+- Producer生产的数据持久化到broker，采用mmap文件映射，实现顺序的快速写入；
+- Customer从broker读取数据，采用sendfile，将磁盘文件读到OS内核缓冲区后，直接转到socket buffer进行网络发送。
+
+### 1.9.8 Netty中的零拷贝
+
+Netty中的Zero-copy与上面我们所提到到OS层面上的Zero-copy不太一样, Netty的Zero-copy完全是在用户态(Java层面)的，它的Zero-copy的更多的是偏向于优化数据操作这样的概念。
+
+Netty的Zero-copy体现在如下几个个方面:
+
+- Netty提供了CompositeByteBuf类，它可以将多个ByteBuf合并为一个逻辑上的ByteBuf，避免了各个ByteBuf之间的拷贝。
+- 通过wrap操作，我们可以将byte[]数组、ByteBuf、 ByteBuffer 等包装成一个 Netty ByteBuf对象，进而避免了拷贝操作。
+- ByteBuf支持slice 操作，因此可以将ByteBuf分解为多个共享同一个存储区域的ByteBuf，避免了内存的拷贝。
+- 通过FileRegion包装的FileChannel.tranferTo实现文件传输，可以直接将文件缓冲区的数据发送到目标Channel，避免了传统通过循环write方式导致的内存拷贝问题。
+
+**注意:前三个都是 广义零拷贝，都是减少不必要数据copy；偏向于应用层数据优化的操作。**
+
+### RocketMQ和Kafka对比
+
+RocketMQ 选择了 mmap + write(从读的channel到写channel,就是内核空间中的那次cpu调用) 这种零拷贝方式，适用于业务级消息这种小块文件的数据持久化和传输；而 Kafka 采用的是 sendfile 这种零拷贝方式，适用于系统日志消息这种高吞吐量的大块文件的数据持久化和传输。但是值得注意的一点是，Kafka 的索引文件使用的是 mmap + write 方式，数据文件使用的是 sendfile 方式。
+
+![](resource/NIORocketMQKafkaCompare.jpg)
+
+## 参考文章
+
+[引用链接1](https://zhuanlan.zhihu.com/p/83398714)
+
+[引用链接2](https://www.jianshu.com/p/2fd2f03b4cc3)
+
+[引用链接3](https://pdai.tech/md/java/io/java-io-nio-zerocopy.html)
