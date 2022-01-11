@@ -1588,3 +1588,134 @@ JAVA NIO和JAVA AIO框架，除了因为操作系统的实现不一样而去掉�
 
 
 + JAVA NIO框架存在一个poll/epoll bug: Selector doesn’t block on Selector.select(timeout)，不能block意味着CPU的使用率会变成100%(这是底层JNI的问题，上层要处理这个异常实际上也好办)。当然这个bug只有在Linux内核上才能重现。这个问题在JDK 1.7版本中还没有被完全解决: http://bugs.java.com/bugdatabase/view_bug.do?bug_id=2147719。虽然Netty 4.0中也是基于JAVA NIO框架进行封装的(上文中已经给出了Netty中NioServerSocketChannel类的介绍)，但是Netty已经将这个bug进行了处理。
+
+
+
+## 1.9 零拷贝
+
+### 1.9.1 什么是零拷贝
+
+零拷贝(英语: Zero-copy) 技术是指计算机执行操作时，CPU不需要先将数据从某处内存复制到另一个特定区域。这种技术通常用于通过网络传输文件时节省CPU周期和内存带宽。
+
+➢零拷贝技术可以减少数据拷贝和共享总线操作的次数，消除传输数据在存储器之间不必要的中间拷贝次数，从而有效地提高数据传输效率
+ ➢零拷贝技术减少了用户进程地址空间和内核地址空间之间因为上:下文切换而带来的开销
+ `可以看出没有说不需要拷贝，只是说减少冗余[不必要]的拷贝。`
+
+### 1.9.2 中断与DMA
+
+IO中断，需要CPU响应，需要CPU参与，因此效率比较低。
+
+![](resource/NIOCpuBreak.webp)
+
+用户进程需要读取磁盘数据，需要CPU中断，发起IO请求，每次的IO中断，都带来CPU的上下文切换。
+
+**因此出现了——DMA。**
+
+DMA(Direct Memory Access，直接内存存取) 是所有现代电脑的重要特色，它允许不同速度的硬件装置来沟通，而不需要依赖于CPU 的大量中断负载。
+ DMA控制器，接管了数据读写请求，减少CPU的负担。这样一来，CPU能高效工作了。
+ 现代硬盘基本都支持DMA。
+
+![](resource/NIODma.webp)
+
+### 1.9.3 Linux IO流程
+
+实际因此IO读取，涉及两个过程：
+1、DMA等待数据准备好，把磁盘数据读取到操作系统内核缓冲区；
+2、用户进程，将内核缓冲区的数据copy到用户空间。
+这两个过程，都是阻塞的。
+
+![](resource/NIOStream.webp)
+
+1. 传统数据传送
+
+   读取文件，再用socket发送出去
+   传统方式实现：
+   先读取、再发送，实际经过1~4四次copy。
+
+   ```java
+   buffer = File.read 
+   Socket.send(buffer)
+   ```
+
+   1、第一次：将磁盘文件，读取到操作系统内核缓冲区；
+    2、第二次：将内核缓冲区的数据，copy到application应用程序的buffer；
+    3、第三步：将application应用程序buffer中的数据，copy到socket网络发送缓冲区(属于操作系统内核的缓冲区)；
+    4、第四次：将socket buffer的数据，copy到网卡，由网卡进行网络传输。
+
+   ![](resource/NIOSocketCopy.webp)
+
+   传统方式，读取磁盘文件并进行网络发送，经过的四次数据copy是非常繁琐的。实际IO读写，需要进行IO中断，需要CPU响应中断(带来上下文切换)，尽管后来引入DMA来接管CPU的中断请求，但四次copy是存在“不必要的拷贝”的。
+
+   重新思考传统IO方式，会注意到实际上并不需要第二个和第三个数据副本。应用程序除了缓存数据并将其传输回套接字缓冲区之外什么都不做。相反，数据可以直接从读缓冲区传输到套接字缓冲区。
+
+   显然，第二次和第三次数据copy 其实在这种场景下没有什么帮助反而带来开销，这也正是零拷贝出现的背景和意义。
+
+   传统数据传送所消耗的成本：4次拷贝，4次上下文切换。
+    4次拷贝，其中两次是DMA copy，两次是CPU copy。如下图所示
+    拷贝是个IO过程，需要系统调用。
+
+   ![](resource/NIOSocketCopy2.webp)
+
+   **注意一点的是 内核从磁盘上面读取数据 是 不消耗CPU时间的，是通过磁盘控制器完成；称之为DMA Copy。网卡发送也用DMA。**
+
+   
+
+### 1.9.4 零拷贝的出现
+
+目的：减少IO流程中不必要的拷贝
+零拷贝需要OS支持，也就是需要kernel暴露api。虚拟机不能操作内核
+
+![](resource/NIOZeroCopy.webp)
+
+### 1.9.5 Linux中 零拷贝类型
+
+1. mmap内存映射
+
+   `data loaded from disk is stored in a kernel buffer by DMA copy. Then the pages of the application buffer are mapped to the kernel buffer, so that the data copy between kernel buffers and application buffers are omitted.
+
+   DMA加载磁盘数据到kernel buffer后，应用程序缓冲区(application buffers)和内核缓冲区(kernel buffer)进行映射，数据再应用缓冲区和内核缓存区的改变就能省略。
+
+   ![](resource/NIOZeroCopyMmap.webp)
+
+   **mmap内存映射将会经历：3次拷贝: 1次cpu copy，2次DMA copy；以及4次上下文切换**
+
+2. sendfile  (linux 2.1支持的sendfile)
+
+   `when calling the sendfile() system call, data are fetched from disk and copied into a kernel buffer by DMA copy. Then data are copied directly from the kernel buffer to the socket buffer. Once all data are copied into the socket buffer, the sendfile() system call will return to indicate the completion of data transfer from the kernel buffer to socket buffer. Then, data will be copied to the buffer on the network card and transferred to the network.`
+
+   当调用sendfile()时，DMA将磁盘数据复制到kernel buffer，然后将内核中的kernel buffer直接拷贝到socket buffer；
+    一旦数据全都拷贝到socket buffer，sendfile()系统调用将会return、代表数据转化的完成。
+    socket buffer里的数据就能在网络传输了。
+
+   ![](resource/NIOZeroCopySendFile.webp)
+
+   **sendfile会经历：3次拷贝，1次CPU copy 2次DMA copy；以及2次上下文切换**
+
+3. Sendfile With DMA Scatter/Gather Copy
+
+   `Then by using the DMA scatter/gather operation, the network interface card can gather all the data from different memory locations and store the assembled packet in the network card buffer.`
+
+   Scatter/Gather可以看作是sendfile的增强版，批量sendfile。
+
+   ![](resource/NIOZeroCopySendFileBatch.webp)
+
+   **IO请求批量化**
+    DMA scatter/gather：需要DMA控制器支持的。
+    DMA工作流程：cpu发送IO请求给DMA，DMA然后读取数据。
+    IO请求：相当于可以看作包含一个物理地址。
+    从一系列物理地址(10)读数据:普通的DMA (10请求)
+    dma scatter/gather:一次给10个物理地址， 一个请求就可以（批量处理）。
+
+4. splice  (Linux 2.6.17 支持splice)
+
+   `it does not need to copy data between kernel space and user space.
+    When using this approach, data are copied from disk to kernel buffer first. Then the splice() system call allows data to move between different buffers in kernel space without the copy to user space.
+    Unlike the method sendfile() with DMA scatter/gather copy, splice() does not need support from hardware.`
+
+   数据从磁盘读取到OS内核缓冲区后，在内核缓冲区直接可将其转成内核空间其他数据buffer，而不需要拷贝到用户空间。
+    如下图所示，从磁盘读取到内核buffer后，在内核空间直接与socket buffer建立pipe管道。
+    和sendfile()不同的是，splice()不需要硬件支持。
+
+   ![](resource/NIOZeroCopySplice.webp)
+
+5. 
