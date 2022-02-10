@@ -917,3 +917,119 @@ HotSpot 的执行引擎采用的并非是基于寄存器的架构，但这并不
 ##### 1.3.3.4.5 附加信息
 
 栈帧中还允许携带与 Java 虚拟机实现相关的一些附加信息。例如，对程序调试提供支持的信息，但这些信息取决于具体的虚拟机实现。
+
+#### 1.3.3.3 堆
+
+##### 1.3.3.3.1 内存划分
+
+对于大多数应用，Java 堆是 Java 虚拟机管理的内存中最大的一块，被所有线程共享。此内存区域的唯一目的就是存放对象实例，几乎所有的对象实例以及数据都在这里分配内存。
+
+为了进行高效的垃圾回收，虚拟机把堆内存**逻辑上**划分成三块区域（分代的唯一理由就是优化 GC 性能）：
+
+- 新生带（年轻代）：新对象和没达到一定年龄的对象都在新生代
+- 老年代（养老区）：被长时间使用的对象，老年代的内存空间应该要比年轻代更大
+- 元空间（JDK1.8 之前叫永久代）：像一些方法中的操作临时对象等，JDK1.8 之前是占用 JVM 内存，JDK1.8 之后直接使用物理内存
+
+![](resource/jvmHeapStructure.jpg)
+
+Java 虚拟机规范规定，Java 堆可以是处于物理上不连续的内存空间中，只要逻辑上是连续的即可，像磁盘空间一样。实现时，既可以是固定大小，也可以是可扩展的，主流虚拟机都是可扩展的（通过 `-Xmx` 和 `-Xms` 控制），如果堆中没有完成实例分配，并且堆无法再扩展时，就会抛出 `OutOfMemoryError` 异常。
+
+**年轻代(Young Generation)**
+
+年轻代是所有新对象创建的地方。当填充年轻代时，执行垃圾收集。这种垃圾收集称为 **Minor GC**。年轻一代被分为三个部分——伊甸园（**Eden Memory**）和两个幸存区（**Survivor Memory**，被称为from/to或s0/s1），默认比例是`8:1:1`
+
+- 大多数新创建的对象都位于 Eden 内存空间中
+- 当 Eden 空间被对象填充时，执行**Minor GC**，并将所有幸存者对象移动到一个幸存者空间中
+- Minor GC 检查幸存者对象，并将它们移动到另一个幸存者空间。所以每次，一个幸存者空间总是空的
+- 经过多次 GC 循环后存活下来的对象被移动到老年代。通常，这是通过设置年轻一代对象的年龄阈值(默认15)来实现的，然后他们才有资格提升到老一代
+
+**老年代(Old Generation)**
+
+旧的一代内存包含那些经过许多轮小型 GC 后仍然存活的对象。通常，垃圾收集是在老年代内存满时执行的。老年代垃圾收集称为 主GC（Major GC），通常需要更长的时间。
+
+大对象直接进入老年代（大对象是指需要大量连续内存空间的对象）。这样做的目的是避免在 Eden 区和两个Survivor 区之间发生大量的内存拷贝
+
+**元空间(MetaSpace)**
+
+![](resource/jvmMetaSpace.jpg)
+
+不管是 JDK8 之前的永久代，还是 JDK8 及以后的元空间，都可以看作是 Java 虚拟机规范中方法区的实现。
+
+虽然 Java 虚拟机规范把方法区描述为堆的一个逻辑部分，但是它却有一个别名叫 Non-Heap（非堆），目的应该是与 Java 堆区分开。
+
+所以元空间放在后边的方法区再说。
+
+##### 1.3.3.3.2 设置堆内存大小和 OOM
+
+Java 堆用于存储 Java 对象实例，那么堆的大小在 JVM 启动的时候就确定了，我们可以通过 `-Xmx` 和 `-Xms` 来设定
+
+- `-Xms` 用来表示堆的起始内存，等价于 `-XX:InitialHeapSize`
+- `-Xmx` 用来表示堆的最大内存，等价于 `-XX:MaxHeapSize`
+
+如果堆的内存大小超过 `-Xmx` 设定的最大内存， 就会抛出 `OutOfMemoryError` 异常。
+
+我们通常会将 `-Xmx` 和 `-Xms` 两个参数配置为相同的值，其目的是为了能够在垃圾回收机制清理完堆区后不再需要重新分隔计算堆的大小，从而提高性能
+
+- 默认情况下，初始堆内存大小为：电脑内存大小/64
+- 默认情况下，最大堆内存大小为：电脑内存大小/4
+
+可以通过代码获取到我们的设置值，当然也可以模拟 OOM：
+
+```java
+public static void main(String[] args) {
+
+  //返回 JVM 堆大小
+  long initalMemory = Runtime.getRuntime().totalMemory() / 1024 /1024;
+  //返回 JVM 堆的最大内存
+  long maxMemory = Runtime.getRuntime().maxMemory() / 1024 /1024;
+
+  System.out.println("-Xms : "+initalMemory + "M");
+  System.out.println("-Xmx : "+maxMemory + "M");
+
+  System.out.println("系统内存大小：" + initalMemory * 64 / 1024 + "G");
+  System.out.println("系统内存大小：" + maxMemory * 4 / 1024 + "G");
+}
+//结果
+-Xms : 245M
+-Xmx : 3621M
+系统内存大小：15G
+系统内存大小：14G
+
+```
+
+**查看jvm堆内存分配**
+
+1. 在默认不配置 JVM 堆内存大小的情况下，JVM 根据默认值来配置当前内存大小
+
+2. 默认情况下新生代和老年代的比例是 1:2，可以通过 `–XX:NewRatio` 来配置
+
+   - 新生代中的 **Eden**:**From Survivor**:**To Survivor** 的比例是 **8:1:1**，可以通过 `-XX:SurvivorRatio` 来配置
+
+3. 若在 JDK 7 中开启了 `-XX:+UseAdaptiveSizePolicy`，JVM 会动态调整 JVM 堆中各个区域的大小以及进入老年代的年龄
+
+   此时 `–XX:NewRatio` 和 `-XX:SurvivorRatio`  将会失效，而 JDK 8 是默认开启`-XX:+UseAdaptiveSizePolicy`
+
+   在 JDK 8中，**不要随意关闭**`-XX:+UseAdaptiveSizePolicy`，除非对堆内存的划分有明确的规划
+
+每次 GC 后都会重新计算 Eden、From Survivor、To Survivor 的大小
+
+计算依据是**GC过程**中统计的**GC时间**、**吞吐量**、**内存占用量**
+
+```
+java -XX:+PrintFlagsFinal -version | grep HeapSize
+    uintx ErgoHeapSizeLimit                         = 0                                   {product}
+    uintx HeapSizePerGCThread                       = 87241520                            {product}
+    uintx InitialHeapSize                          := 134217728                           {product}
+    uintx LargePageHeapSizeThreshold                = 134217728                           {product}
+    uintx MaxHeapSize                              := 2147483648                          {product}
+java version "1.8.0_211"
+Java(TM) SE Runtime Environment (build 1.8.0_211-b12)
+Java HotSpot(TM) 64-Bit Server VM (build 25.211-b12, mixed mode)
+
+```
+
+```
+$ jmap -heap 进程号
+
+```
+
